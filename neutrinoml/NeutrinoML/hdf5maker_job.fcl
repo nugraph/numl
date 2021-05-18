@@ -1,0 +1,39 @@
+#include "services_dune.fcl"
+#include "HDF5Maker.fcl"
+#include "tools_dune.fcl"
+
+process_name: trueenergy
+
+services:
+{
+  TFileService:          { fileName: "reco_hist.root" }
+  TimeTracker:           {}
+  MemoryTracker:         {}
+  RandomNumberGenerator: {}
+  FileCatalogMetadata:   @local::art_file_catalog_mc
+                         @table::dunefd_services
+                         @table::dunefd_reco_services
+  Geometry:              @local::dune10kt_geo
+  message:               @local::dune_message_services
+}
+
+source:
+{
+  module_type: RootInput
+  maxEvents:   -1
+}
+
+physics:
+{
+
+  analyzers:
+  {
+    hdf5maker:   @local::hdf5maker
+  }
+
+ ana:       [ hdf5maker ]
+
+ end_paths:     [ ana ]  
+}
+
+services.message.destinations.LogStandardOut.threshold: "INFO"

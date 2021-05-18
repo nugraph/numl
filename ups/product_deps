@@ -1,0 +1,28 @@
+parent neutrinoml v09_22_02
+defaultqual e19
+
+incdir	product_dir     include
+libdir	fq_dir	        lib
+bindir	fq_dir          bin
+fcldir  product_dir     fcl
+
+product 	version
+larsoft 	v09_22_02
+hep_hpc         v0_13_03
+cetbuildtools	v7_12_01  -  only_for_build
+end_product_list
+
+qualifier   larsoft     hep_hpc   notes
+e20:debug   e20:debug   e20
+e20:prof    e20:prof    e20
+e19:debug   e19:debug   e19
+e19:prof    e19:prof    e19
+c7:debug    c7:debug    c7
+c7:prof     c7:prof     c7
+end_qualifier_list
+
+# Preserve tabs and formatting in emacs and vi / vim:
+
+### Local Variables:
+### tab-width: 8
+### End:
