@@ -1,6 +1,6 @@
 hdf5maker:
 {
-  module_type:  "larana/NeutrinoML/HDF5Maker"
+  module_type:  "numl/NeutrinoML/HDF5Maker"
   TruthLabel:   "generator"
   HitLabel:     "hitfd"
   SPLabel:      "sps"
