@@ -1,5 +1,5 @@
-parent numl v09_22_00
-defaultqual e19
+parent numl v09_25_00
+defaultqual e20:prof
 
 incdir	product_dir     include
 libdir	fq_dir	        lib
@@ -7,14 +7,14 @@ bindir	fq_dir          bin
 fcldir  product_dir     fcl
 
 product 	version
-larreco         v09_06_05
+larreco         v09_06_07
 hep_hpc         v0_14_01
-cetbuildtools	v7_12_01  -  only_for_build
+cetbuildtools	v7_17_01  -  only_for_build
 end_product_list
 
 qualifier   larreco     hep_hpc   notes
-e19:debug   e19:debug   e19:debug
-e19:prof    e19:prof    e19:prof
+e20:debug   e20:debug   e20:debug
+e20:prof    e20:prof    e20:prof
 end_qualifier_list
 
 # Preserve tabs and formatting in emacs and vi / vim:
