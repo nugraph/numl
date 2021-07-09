@@ -77,14 +77,14 @@ private:
 
   string fOutputName;
 
-  hep_hpc::hdf5::File fFile;  ///< Output HDF5 file
+  hep_hpc::hdf5::File fFile;  ///< output HDF5 file
 
   hep_hpc::hdf5::Ntuple<Column<int, 1>,    // event id (run, subrun, event)
                         Column<int, 1>,    // is cc
                         Column<float, 1>,  // nu energy
                         Column<float, 1>,  // lep energy
                         Column<float, 1>   // nu dir (x, y, z)
-  >* fEventNtuple; ///< Event ntuple
+  >* fEventNtuple; ///< event ntuple
 
   hep_hpc::hdf5::Ntuple<Column<int, 1>,    // event id (run, subrun, event)
                         Column<int, 1>,    // spacepoint id
@@ -114,13 +114,13 @@ private:
                         Column<float, 1>,  // end position (x, y, z)
                         Column<string, 1>, // start process
                         Column<string, 1>  // end process
-  >* fParticleNtuple; ///< Particle ntuple
+  >* fParticleNtuple; ///< particle ntuple
 
   hep_hpc::hdf5::Ntuple<Column<int, 1>,    // event id (run, subrun, event)
                         Column<int, 1>,    // hit id
                         Column<int, 1>,    // g4 id
-                        Column<float, 1>   // energy fraction
-  >* fEnergyDepNtuple;
+                        Column<float, 1>   // deposited energy [ MeV ]
+  >* fEnergyDepNtuple; ///< energy deposition ntuple
 };
 
 
@@ -256,14 +256,14 @@ void HDF5Maker::analyze(art::Event const& e)
     for (const TrackIDE& ide : bt->HitToTrackIDEs(clockData, hit)) {
       g4id.insert(ide.trackID);
       fEnergyDepNtuple->insert(evtID.data(),
-        hit.key(), ide.trackID, ide.energyFrac
+        hit.key(), ide.trackID, ide.energy
       );
       LogInfo("HDF5Maker") << "Filling energy deposit table"
                            << "\nrun " << evtID[0] << ", subrun " << evtID[1]
                            << ", event " << evtID[2]
                            << "\nhit id " << hit.key() << ", g4 id "
-                           << ide.trackID << ", energy fraction "
-                           << ide.energyFrac;
+                           << ide.trackID << ", energy "
+                           << ide.energy << " MeV";
     } // for energy deposit
   } // for hit
 
@@ -364,7 +364,7 @@ void HDF5Maker::beginSubRun(art::SubRun const& sr) {
       make_column<int>("event_id", 3),
       make_scalar_column<int>("hit_id"),
       make_scalar_column<int>("g4_id"),
-      make_scalar_column<float>("energy_fraction")
+      make_scalar_column<float>("energy")
   ));
 }
 
