@@ -1,0 +1,58 @@
+#include "reco_uboone_mcc9_8.fcl"
+#include "SpacePointSolver.fcl"
+#include "HDF5Maker.fcl"
+
+process_name: trueenergy
+
+services:
+{
+  TFileService:          { fileName: "reco_hist.root" }
+  TimeTracker:           {}
+  MemoryTracker:         {}
+  RandomNumberGenerator: {}
+  @table::microboone_reco_mcc8_services
+  ParticleInventoryService: {
+     ParticleInventory: {
+        EveIdCalculator: "EmEveIdCalculator"
+        G4ModuleLabel: "largeant"
+	OverrideRealData: true
+     }
+  }
+}
+
+source:
+{
+  module_type: RootInput
+  maxEvents:   -1
+}
+
+physics:
+{
+
+  analyzers:
+  {
+    hdf5maker:   @local::hdf5maker
+  }
+
+  producers:
+  {
+    nuslhits: { module_type: "PandoraNuSliceHitsProducer" }
+    sps: @local::standard_spacepointsolver
+  }
+
+ reco: [nuslhits, sps]
+ ana:       [ hdf5maker ]
+
+ trigger_paths:       [ reco ]
+ end_paths:     [ ana ]  
+}
+
+physics.producers.sps.HitLabel: "nuslhits"
+physics.producers.sps.WireIntersectThreshold: 0.3
+physics.producers.sps.WireIntersectThresholdDriftDir: 0.3
+
+physics.analyzers.hdf5maker.HitLabel: "nuslhits"
+physics.analyzers.hdf5maker.HitTruthLabel: "nuslhits"
+physics.analyzers.hdf5maker.UseMap: true
+
+#services.message.destinations.LogStandardOut.threshold: "INFO"

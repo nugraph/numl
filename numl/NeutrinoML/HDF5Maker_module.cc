@@ -26,6 +26,8 @@
 #include "larsim/MCCheater/ParticleInventoryService.h"
 #include "lardata/DetectorInfoServices/DetectorPropertiesService.h"
 
+#include "lardataobj/AnalysisBase/BackTrackerMatchingData.h"
+
 #include "hep_hpc/hdf5/make_ntuple.hpp"
 
 using std::array;
@@ -73,8 +75,10 @@ private:
 
   string fTruthLabel;
   string fHitLabel;
+  string fHitTruthLabel;
   string fSPLabel;
 
+  bool fUseMap;
   string fEventInfo;
   string fOutputName;
 
@@ -132,7 +136,9 @@ HDF5Maker::HDF5Maker(fhicl::ParameterSet const& p)
   : EDAnalyzer{p},
     fTruthLabel(p.get<string>("TruthLabel")),
     fHitLabel(  p.get<string>("HitLabel")),
+    fHitTruthLabel(  p.get<string>("HitTruthLabel","")),
     fSPLabel(   p.get<string>("SPLabel")),
+    fUseMap(    p.get<bool>("UseMap", false)),
     fEventInfo( p.get<string>("EventInfo")),
     fOutputName(p.get<string>("OutputName"))
 {
@@ -143,7 +149,11 @@ HDF5Maker::HDF5Maker(fhicl::ParameterSet const& p)
 
 void HDF5Maker::analyze(art::Event const& e)
 {
-  art::ServiceHandle<cheat::BackTrackerService> bt;
+  const cheat::BackTrackerService* bt = 0;
+  if (fUseMap==false) {
+    art::ServiceHandle<cheat::BackTrackerService> bt_h;
+    bt = bt_h.get();
+  }
 
   int run = e.id().run();
   int subrun = e.id().subRun();
@@ -162,7 +172,7 @@ void HDF5Maker::analyze(art::Event const& e)
     // Get MC truth
     art::Handle< vector< MCTruth > > truthHandle;
     e.getByLabel(fTruthLabel, truthHandle);
-    if (!truthHandle.isValid() || truthHandle->size() != 1) {
+    if (!truthHandle.isValid() || truthHandle->size() == 0) {
       throw art::Exception(art::errors::LogicError)
         << "Expected to find exactly one MC truth object!";
     }
@@ -218,8 +228,8 @@ void HDF5Maker::analyze(art::Event const& e)
       (float)splist[i]->XYZ()[2]
     };
 
-    array<int, 3> hitID { 0, 0, 0 };
-    for (size_t j = 0; j < 3; ++j)
+    array<int, 3> hitID { -1, -1, -1 };
+    for (size_t j = 0; j < sp2Hit[i].size(); ++j)
       hitID[sp2Hit[i][j]->View()] = sp2Hit[i][j].key();
 
     fSpacePointNtuple->insert(evtID.data(),
@@ -240,6 +250,11 @@ void HDF5Maker::analyze(art::Event const& e)
   std::set<int> g4id;
   auto const clockData = ServiceHandle<DetectorClocksService>()->DataFor(e);
   auto const detProp = ServiceHandle<DetectorPropertiesService>()->DataFor(e, clockData);
+
+  std::unique_ptr<art::FindManyP<simb::MCParticle, anab::BackTrackerHitMatchingData>> hittruth;
+  if (fUseMap) {
+    hittruth = std::unique_ptr<art::FindManyP<simb::MCParticle, anab::BackTrackerHitMatchingData> >(new art::FindManyP<simb::MCParticle, anab::BackTrackerHitMatchingData>(hitListHandle, e, fHitTruthLabel));
+  }
 
   // Loop over hits
   for (art::Ptr< Hit > hit : hitlist) {
@@ -269,18 +284,36 @@ void HDF5Maker::analyze(art::Event const& e)
                          
 
     // Fill energy deposit table
-    for (const TrackIDE& ide : bt->HitToTrackIDEs(clockData, hit)) {
-      g4id.insert(ide.trackID);
-      fEnergyDepNtuple->insert(evtID.data(),
-        hit.key(), ide.trackID, ide.energy
-      );
-      LogInfo("HDF5Maker") << "Filling energy deposit table"
-                           << "\nrun " << evtID[0] << ", subrun " << evtID[1]
-                           << ", event " << evtID[2]
-                           << "\nhit id " << hit.key() << ", g4 id "
-                           << ide.trackID << ", energy "
-                           << ide.energy << " MeV";
-    } // for energy deposit
+    if (fUseMap) {
+      std::vector<art::Ptr<simb::MCParticle>> particle_vec = hittruth->at(hit.key());
+      std::vector<anab::BackTrackerHitMatchingData const *> match_vec = hittruth->data(hit.key());
+      //loop over particles
+      for (size_t i_p = 0; i_p < particle_vec.size(); ++i_p) {
+	g4id.insert(particle_vec[i_p]->TrackId());
+	fEnergyDepNtuple->insert(evtID.data(),
+		hit.key(), particle_vec[i_p]->TrackId(), match_vec[i_p]->ideFraction
+	);
+	LogInfo("HDF5Maker") << "Filling energy deposit table"
+			     << "\nrun " << evtID[0] << ", subrun " << evtID[1]
+			     << ", event " << evtID[2]
+			     << "\nhit id " << hit.key() << ", g4 id "
+			     << particle_vec[i_p]->TrackId() << ", energy fraction "
+			     << match_vec[i_p]->ideFraction;
+      }
+    } else {
+      for (const TrackIDE& ide : bt->HitToTrackIDEs(clockData, hit)) {
+	g4id.insert(ide.trackID);
+	fEnergyDepNtuple->insert(evtID.data(),
+		hit.key(), ide.trackID, ide.energy
+  );
+	LogInfo("HDF5Maker") << "Filling energy deposit table"
+			     << "\nrun " << evtID[0] << ", subrun " << evtID[1]
+			     << ", event " << evtID[2]
+			     << "\nhit id " << hit.key() << ", g4 id "
+			     << ide.trackID << ", energy "
+			     << ide.energy << " MeV";
+      } // for energy deposit
+    } // if using microboone map method or not
   } // for hit
 
   ServiceHandle<ParticleInventoryService> pi;
@@ -289,7 +322,8 @@ void HDF5Maker::analyze(art::Event const& e)
   // Add invisible particles to hierarchy
   for (int id : g4id) {
     const MCParticle* p = pi->TrackIdToParticle_P(abs(id));
-    while (p->Mother() != 0) {
+    if (p==NULL) continue;
+    while (p != 0 && p->Mother() != 0) {
       allIDs.insert(abs(p->Mother()));
       p = pi->TrackIdToParticle_P(abs(p->Mother()));
     }
@@ -298,6 +332,7 @@ void HDF5Maker::analyze(art::Event const& e)
   // Loop over true particles and fill table
   for (int id : allIDs) {
     const MCParticle* p = pi->TrackIdToParticle_P(abs(id));
+    if (p==NULL) continue;
     array<float, 3> particleStart { (float)p->Vx(), (float)p->Vy(), (float)p->Vz() };
     array<float, 3> particleEnd { (float)p->EndX(), (float)p->EndY(), (float)p->EndZ() };
     fParticleNtuple->insert(evtID.data(),
@@ -323,10 +358,13 @@ void HDF5Maker::analyze(art::Event const& e)
 
 void HDF5Maker::beginSubRun(art::SubRun const& sr) {
 
+  struct timeval now;
+  gettimeofday(&now, NULL);
+
   // Open HDF5 output
   std::ostringstream fileName;
   fileName << fOutputName << "_r" << setfill('0') << setw(5) << sr.run()
-    << "_r" << setfill('0') << setw(5) << sr.subRun() << ".h5";
+    << "_s" << setfill('0') << setw(5) << sr.subRun() << "_ts" << setw(6) << now.tv_usec << ".h5";
 
   fFile = hep_hpc::hdf5::File(fileName.str(), H5F_ACC_TRUNC);
 
