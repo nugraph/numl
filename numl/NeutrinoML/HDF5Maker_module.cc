@@ -322,8 +322,7 @@ void HDF5Maker::analyze(art::Event const& e)
   // Add invisible particles to hierarchy
   for (int id : g4id) {
     const MCParticle* p = pi->TrackIdToParticle_P(abs(id));
-    if (p==NULL) continue;
-    while (p != 0 && p->Mother() != 0) {
+    while (p->Mother() != 0) {
       allIDs.insert(abs(p->Mother()));
       p = pi->TrackIdToParticle_P(abs(p->Mother()));
     }
