@@ -151,21 +151,6 @@ void HDF5Maker::analyze(art::Event const& e)
 
   array<int, 3> evtID { run, subrun, event };
 
-  // Get MC truth
-  art::Handle< vector< MCTruth > > truthHandle;
-  e.getByLabel(fTruthLabel, truthHandle);
-  if (!truthHandle.isValid() || truthHandle->size() != 1) {
-    throw art::Exception(art::errors::LogicError)
-      << "Expected to find exactly one MC truth object!";
-  }
-  simb::MCNeutrino nutruth = truthHandle->at(0).GetNeutrino();
-
-  array<float, 3> nuMomentum {
-    (float)nutruth.Nu().Momentum().Vect().Unit().X(),
-    (float)nutruth.Nu().Momentum().Vect().Unit().Y(),
-    (float)nutruth.Nu().Momentum().Vect().Unit().Z()
-  };
-
   // Fill event table
   if (fEventInfo == "none") {
     fEventNtuple->insert( evtID.data() );
@@ -174,6 +159,21 @@ void HDF5Maker::analyze(art::Event const& e)
                          << ", event " << evtID[2];
   }
   if (fEventInfo == "nu") {
+    // Get MC truth
+    art::Handle< vector< MCTruth > > truthHandle;
+    e.getByLabel(fTruthLabel, truthHandle);
+    if (!truthHandle.isValid() || truthHandle->size() != 1) {
+      throw art::Exception(art::errors::LogicError)
+        << "Expected to find exactly one MC truth object!";
+    }
+    simb::MCNeutrino nutruth = truthHandle->at(0).GetNeutrino();
+
+    array<float, 3> nuMomentum {
+      (float)nutruth.Nu().Momentum().Vect().Unit().X(),
+      (float)nutruth.Nu().Momentum().Vect().Unit().Y(),
+      (float)nutruth.Nu().Momentum().Vect().Unit().Z()
+    };
+
     fEventNtupleNu->insert( evtID.data(),
       nutruth.CCNC() == simb::kCC,
       nutruth.Nu().E(),
