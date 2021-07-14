@@ -4,5 +4,6 @@ hdf5maker:
   TruthLabel:   "generator"
   HitLabel:     "hitfd"
   SPLabel:      "sps"
+  EventInfo:    "nu"
   OutputName:   "NeutrinoML"
 }

@@ -75,16 +75,20 @@ private:
   string fHitLabel;
   string fSPLabel;
 
+  string fEventInfo;
   string fOutputName;
 
   hep_hpc::hdf5::File fFile;  ///< output HDF5 file
+
+  hep_hpc::hdf5::Ntuple<Column<int, 1>     // event id (run, subrun, event)
+  >* fEventNtuple; ///< event ntuple
 
   hep_hpc::hdf5::Ntuple<Column<int, 1>,    // event id (run, subrun, event)
                         Column<int, 1>,    // is cc
                         Column<float, 1>,  // nu energy
                         Column<float, 1>,  // lep energy
                         Column<float, 1>   // nu dir (x, y, z)
-  >* fEventNtuple; ///< event ntuple
+  >* fEventNtupleNu; ///< event ntuple with neutrino information
 
   hep_hpc::hdf5::Ntuple<Column<int, 1>,    // event id (run, subrun, event)
                         Column<int, 1>,    // spacepoint id
@@ -129,8 +133,13 @@ HDF5Maker::HDF5Maker(fhicl::ParameterSet const& p)
     fTruthLabel(p.get<string>("TruthLabel")),
     fHitLabel(  p.get<string>("HitLabel")),
     fSPLabel(   p.get<string>("SPLabel")),
+    fEventInfo( p.get<string>("EventInfo")),
     fOutputName(p.get<string>("OutputName"))
-{}
+{
+  if (fEventInfo != "none" && fEventInfo != "nu")
+    throw art::Exception(art::errors::LogicError)
+      << "EventInfo must be \"none\" or \"nu\", not " << fEventInfo;
+}
 
 void HDF5Maker::analyze(art::Event const& e)
 {
@@ -158,21 +167,28 @@ void HDF5Maker::analyze(art::Event const& e)
   };
 
   // Fill event table
-  fEventNtuple->insert( evtID.data(),
-    nutruth.CCNC() == simb::kCC,
-    nutruth.Nu().E(),
-    nutruth.Lepton().E(),
-    nuMomentum.data()
-  );
-
-  LogInfo("HDF5Maker") << "Filling event table"
-                       << "\nrun " << evtID[0] << ", subrun " << evtID[1]
-                       << ", event " << evtID[2]
-                       << "\nis cc? " << (nutruth.CCNC() == simb::kCC)
-                       << ", nu energy " << nutruth.Nu().E()
-                       << ", lepton energy " << nutruth.Lepton().E()
-                       << "\nnu momentum x " << nuMomentum[0] << ", y "
-                       << nuMomentum[1] << ", z " << nuMomentum[2];
+  if (fEventInfo == "none") {
+    fEventNtuple->insert( evtID.data() );
+    LogInfo("HDF5Maker") << "Filling event table"
+                         << "\nrun " << evtID[0] << ", subrun " << evtID[1]
+                         << ", event " << evtID[2];
+  }
+  if (fEventInfo == "nu") {
+    fEventNtupleNu->insert( evtID.data(),
+      nutruth.CCNC() == simb::kCC,
+      nutruth.Nu().E(),
+      nutruth.Lepton().E(),
+      nuMomentum.data()
+    );
+    LogInfo("HDF5Maker") << "Filling event table"
+                         << "\nrun " << evtID[0] << ", subrun " << evtID[1]
+                         << ", event " << evtID[2]
+                         << "\nis cc? " << (nutruth.CCNC() == simb::kCC)
+                         << ", nu energy " << nutruth.Nu().E()
+                         << ", lepton energy " << nutruth.Lepton().E()
+                         << "\nnu momentum x " << nuMomentum[0] << ", y "
+                         << nuMomentum[1] << ", z " << nuMomentum[2];
+  } // if nu event info
 
   // Get spacepoints from the event record
   art::Handle< vector< SpacePoint > > spListHandle;
@@ -314,14 +330,20 @@ void HDF5Maker::beginSubRun(art::SubRun const& sr) {
 
   fFile = hep_hpc::hdf5::File(fileName.str(), H5F_ACC_TRUNC);
 
-  fEventNtuple = new hep_hpc::hdf5::Ntuple(
-    make_ntuple({fFile, "event_table", 1000},
-      make_column<int>("event_id", 3),
-      make_scalar_column<int>("is_cc"),
-      make_scalar_column<float>("nu_energy"),
-      make_scalar_column<float>("lep_energy"),
-      make_column<float>("nu_dir", 3)
-  ));
+  if (fEventInfo == "none")
+    fEventNtuple = new hep_hpc::hdf5::Ntuple(
+      make_ntuple({fFile, "event_table", 1000},
+        make_column<int>("event_id", 3)
+    ));
+  if (fEventInfo == "nu")
+    fEventNtupleNu = new hep_hpc::hdf5::Ntuple(
+      make_ntuple({fFile, "event_table", 1000},
+        make_column<int>("event_id", 3),
+        make_scalar_column<int>("is_cc"),
+        make_scalar_column<float>("nu_energy"),
+        make_scalar_column<float>("lep_energy"),
+        make_column<float>("nu_dir", 3)
+    ));
 
   fSpacePointNtuple = new hep_hpc::hdf5::Ntuple(
     make_ntuple({fFile, "spacepoint_table", 1000},
@@ -369,7 +391,8 @@ void HDF5Maker::beginSubRun(art::SubRun const& sr) {
 }
 
 void HDF5Maker::endSubRun(art::SubRun const& sr) {
-  delete fEventNtuple;
+  if (fEventInfo == "none") delete fEventNtuple;
+  if (fEventInfo == "nu") delete fEventNtupleNu;
   delete fSpacePointNtuple;
   delete fHitNtuple;
   delete fParticleNtuple;
