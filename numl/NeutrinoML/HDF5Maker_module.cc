@@ -143,7 +143,7 @@ HDF5Maker::HDF5Maker(fhicl::ParameterSet const& p)
     fOutputName(p.get<string>("OutputName"))
 {
   if (fEventInfo != "none" && fEventInfo != "nu")
-    throw art::Exception(art::errors::LogicError)
+    throw art::Exception(art::errors::Configuration)
       << "EventInfo must be \"none\" or \"nu\", not " << fEventInfo;
 }
 
