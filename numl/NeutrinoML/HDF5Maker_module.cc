@@ -79,17 +79,20 @@ private:
   string fSPLabel;
 
   bool fUseMap;
-
+  string fEventInfo;
   string fOutputName;
 
-  hep_hpc::hdf5::File fFile;  ///< Output HDF5 file
+  hep_hpc::hdf5::File fFile;  ///< output HDF5 file
+
+  hep_hpc::hdf5::Ntuple<Column<int, 1>     // event id (run, subrun, event)
+  >* fEventNtuple; ///< event ntuple
 
   hep_hpc::hdf5::Ntuple<Column<int, 1>,    // event id (run, subrun, event)
                         Column<int, 1>,    // is cc
                         Column<float, 1>,  // nu energy
                         Column<float, 1>,  // lep energy
                         Column<float, 1>   // nu dir (x, y, z)
-  >* fEventNtuple; ///< Event ntuple
+  >* fEventNtupleNu; ///< event ntuple with neutrino information
 
   hep_hpc::hdf5::Ntuple<Column<int, 1>,    // event id (run, subrun, event)
                         Column<int, 1>,    // spacepoint id
@@ -119,13 +122,13 @@ private:
                         Column<float, 1>,  // end position (x, y, z)
                         Column<string, 1>, // start process
                         Column<string, 1>  // end process
-  >* fParticleNtuple; ///< Particle ntuple
+  >* fParticleNtuple; ///< particle ntuple
 
   hep_hpc::hdf5::Ntuple<Column<int, 1>,    // event id (run, subrun, event)
                         Column<int, 1>,    // hit id
                         Column<int, 1>,    // g4 id
-                        Column<float, 1>   // energy fraction
-  >* fEnergyDepNtuple;
+                        Column<float, 1>   // deposited energy [ MeV ]
+  >* fEnergyDepNtuple; ///< energy deposition ntuple
 };
 
 
@@ -135,9 +138,14 @@ HDF5Maker::HDF5Maker(fhicl::ParameterSet const& p)
     fHitLabel(  p.get<string>("HitLabel")),
     fHitTruthLabel(  p.get<string>("HitTruthLabel","")),
     fSPLabel(   p.get<string>("SPLabel")),
-    fUseMap(    p.get<bool>("UseMap",false)),
+    fUseMap(    p.get<bool>("UseMap", false)),
+    fEventInfo( p.get<string>("EventInfo")),
     fOutputName(p.get<string>("OutputName"))
-{}
+{
+  if (fEventInfo != "none" && fEventInfo != "nu")
+    throw art::Exception(art::errors::LogicError)
+      << "EventInfo must be \"none\" or \"nu\", not " << fEventInfo;
+}
 
 void HDF5Maker::analyze(art::Event const& e)
 {
@@ -153,37 +161,44 @@ void HDF5Maker::analyze(art::Event const& e)
 
   array<int, 3> evtID { run, subrun, event };
 
-  // Get MC truth
-  art::Handle< vector< MCTruth > > truthHandle;
-  e.getByLabel(fTruthLabel, truthHandle);
-  if (!truthHandle.isValid() || truthHandle->size() == 0) {
-    throw art::Exception(art::errors::LogicError)
-      << "Expected to find at least one MC truth object!";
-  }
-  simb::MCNeutrino nutruth = truthHandle->at(0).GetNeutrino();
-
-  array<float, 3> nuMomentum {
-    (float)nutruth.Nu().Momentum().Vect().Unit().X(),
-    (float)nutruth.Nu().Momentum().Vect().Unit().Y(),
-    (float)nutruth.Nu().Momentum().Vect().Unit().Z()
-  };
-
   // Fill event table
-  fEventNtuple->insert( evtID.data(),
-    nutruth.CCNC() == simb::kCC,
-    nutruth.Nu().E(),
-    nutruth.Lepton().E(),
-    nuMomentum.data()
-  );
+  if (fEventInfo == "none") {
+    fEventNtuple->insert( evtID.data() );
+    LogInfo("HDF5Maker") << "Filling event table"
+                         << "\nrun " << evtID[0] << ", subrun " << evtID[1]
+                         << ", event " << evtID[2];
+  }
+  if (fEventInfo == "nu") {
+    // Get MC truth
+    art::Handle< vector< MCTruth > > truthHandle;
+    e.getByLabel(fTruthLabel, truthHandle);
+    if (!truthHandle.isValid() || truthHandle->size() == 0) {
+      throw art::Exception(art::errors::LogicError)
+        << "Expected to find exactly one MC truth object!";
+    }
+    simb::MCNeutrino nutruth = truthHandle->at(0).GetNeutrino();
 
-  LogInfo("HDF5Maker") << "Filling event table"
-                       << "\nrun " << evtID[0] << ", subrun " << evtID[1]
-                       << ", event " << evtID[2]
-                       << "\nis cc? " << (nutruth.CCNC() == simb::kCC)
-                       << ", nu energy " << nutruth.Nu().E()
-                       << ", lepton energy " << nutruth.Lepton().E()
-                       << "\nnu momentum x " << nuMomentum[0] << ", y "
-                       << nuMomentum[1] << ", z " << nuMomentum[2];
+    array<float, 3> nuMomentum {
+      (float)nutruth.Nu().Momentum().Vect().Unit().X(),
+      (float)nutruth.Nu().Momentum().Vect().Unit().Y(),
+      (float)nutruth.Nu().Momentum().Vect().Unit().Z()
+    };
+
+    fEventNtupleNu->insert( evtID.data(),
+      nutruth.CCNC() == simb::kCC,
+      nutruth.Nu().E(),
+      nutruth.Lepton().E(),
+      nuMomentum.data()
+    );
+    LogInfo("HDF5Maker") << "Filling event table"
+                         << "\nrun " << evtID[0] << ", subrun " << evtID[1]
+                         << ", event " << evtID[2]
+                         << "\nis cc? " << (nutruth.CCNC() == simb::kCC)
+                         << ", nu energy " << nutruth.Nu().E()
+                         << ", lepton energy " << nutruth.Lepton().E()
+                         << "\nnu momentum x " << nuMomentum[0] << ", y "
+                         << nuMomentum[1] << ", z " << nuMomentum[2];
+  } // if nu event info
 
   // Get spacepoints from the event record
   art::Handle< vector< SpacePoint > > spListHandle;
@@ -276,8 +291,8 @@ void HDF5Maker::analyze(art::Event const& e)
       for (size_t i_p = 0; i_p < particle_vec.size(); ++i_p) {
 	g4id.insert(particle_vec[i_p]->TrackId());
 	fEnergyDepNtuple->insert(evtID.data(),
-				 hit.key(), particle_vec[i_p]->TrackId(), match_vec[i_p]->ideFraction
-				 );
+		hit.key(), particle_vec[i_p]->TrackId(), match_vec[i_p]->ideFraction
+	);
 	LogInfo("HDF5Maker") << "Filling energy deposit table"
 			     << "\nrun " << evtID[0] << ", subrun " << evtID[1]
 			     << ", event " << evtID[2]
@@ -289,16 +304,16 @@ void HDF5Maker::analyze(art::Event const& e)
       for (const TrackIDE& ide : bt->HitToTrackIDEs(clockData, hit)) {
 	g4id.insert(ide.trackID);
 	fEnergyDepNtuple->insert(evtID.data(),
-				 hit.key(), ide.trackID, ide.energyFrac
-				 );
+		hit.key(), ide.trackID, ide.energy
+  );
 	LogInfo("HDF5Maker") << "Filling energy deposit table"
 			     << "\nrun " << evtID[0] << ", subrun " << evtID[1]
 			     << ", event " << evtID[2]
 			     << "\nhit id " << hit.key() << ", g4 id "
-			     << ide.trackID << ", energy fraction "
-			     << ide.energyFrac;
-    } // for energy deposit
-    }
+			     << ide.trackID << ", energy "
+			     << ide.energy << " MeV";
+      } // for energy deposit
+    } // if using microboone map method or not
   } // for hit
 
   ServiceHandle<ParticleInventoryService> pi;
@@ -353,14 +368,20 @@ void HDF5Maker::beginSubRun(art::SubRun const& sr) {
 
   fFile = hep_hpc::hdf5::File(fileName.str(), H5F_ACC_TRUNC);
 
-  fEventNtuple = new hep_hpc::hdf5::Ntuple(
-    make_ntuple({fFile, "event_table", 1000},
-      make_column<int>("event_id", 3),
-      make_scalar_column<int>("is_cc"),
-      make_scalar_column<float>("nu_energy"),
-      make_scalar_column<float>("lep_energy"),
-      make_column<float>("nu_dir", 3)
-  ));
+  if (fEventInfo == "none")
+    fEventNtuple = new hep_hpc::hdf5::Ntuple(
+      make_ntuple({fFile, "event_table", 1000},
+        make_column<int>("event_id", 3)
+    ));
+  if (fEventInfo == "nu")
+    fEventNtupleNu = new hep_hpc::hdf5::Ntuple(
+      make_ntuple({fFile, "event_table", 1000},
+        make_column<int>("event_id", 3),
+        make_scalar_column<int>("is_cc"),
+        make_scalar_column<float>("nu_energy"),
+        make_scalar_column<float>("lep_energy"),
+        make_column<float>("nu_dir", 3)
+    ));
 
   fSpacePointNtuple = new hep_hpc::hdf5::Ntuple(
     make_ntuple({fFile, "spacepoint_table", 1000},
@@ -403,12 +424,13 @@ void HDF5Maker::beginSubRun(art::SubRun const& sr) {
       make_column<int>("event_id", 3),
       make_scalar_column<int>("hit_id"),
       make_scalar_column<int>("g4_id"),
-      make_scalar_column<float>("energy_fraction")
+      make_scalar_column<float>("energy")
   ));
 }
 
 void HDF5Maker::endSubRun(art::SubRun const& sr) {
-  delete fEventNtuple;
+  if (fEventInfo == "none") delete fEventNtuple;
+  if (fEventInfo == "nu") delete fEventNtupleNu;
   delete fSpacePointNtuple;
   delete fHitNtuple;
   delete fParticleNtuple;
