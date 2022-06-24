@@ -4,5 +4,7 @@ hdf5maker:
   TruthLabel:   "generator"
   HitLabel:     "hitfd"
   SPLabel:      "sps"
+  WireLabel:    "butcher"
   OutputName:   "NeutrinoML"
+  XOffset:      0
 }
