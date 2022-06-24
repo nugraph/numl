@@ -21,10 +21,16 @@
 #include "nusimdata/SimulationBase/MCTruth.h"
 #include "lardataobj/RecoBase/Hit.h"
 #include "lardataobj/RecoBase/SpacePoint.h"
+#include "lardataobj/RecoBase/Wire.h"
 
 #include "larsim/MCCheater/BackTrackerService.h"
 #include "larsim/MCCheater/ParticleInventoryService.h"
 #include "lardata/DetectorInfoServices/DetectorPropertiesService.h"
+#include "larcore/Geometry/Geometry.h"
+
+#include "larevt/SpaceChargeServices/SpaceChargeService.h"
+#include "lardata/DetectorInfoServices/DetectorPropertiesService.h"
+#include "lardata/DetectorInfoServices/DetectorClocksService.h"
 
 #include "lardataobj/AnalysisBase/BackTrackerMatchingData.h"
 
@@ -43,6 +49,7 @@ using simb::MCTruth;
 using sim::TrackIDE;
 using recob::Hit;
 using recob::SpacePoint;
+using recob::Wire;
 
 using mf::LogInfo;
 
@@ -77,12 +84,15 @@ private:
   string fHitLabel;
   string fHitTruthLabel;
   string fSPLabel;
+  string fWireLabel;
 
   bool fUseMap;
   string fEventInfo;
   string fOutputName;
 
-  hep_hpc::hdf5::File fFile;  ///< output HDF5 file
+  float fXOffset;
+
+  hep_hpc::hdf5::File fFile;  ///< Output HDF5 file
 
   hep_hpc::hdf5::Ntuple<Column<int, 1>     // event id (run, subrun, event)
   >* fEventNtuple; ///< event ntuple
@@ -120,6 +130,8 @@ private:
                         Column<float, 1>,  // momentum
                         Column<float, 1>,  // start position (x, y, z)
                         Column<float, 1>,  // end position (x, y, z)
+                        Column<float, 1>,  // start position, corrected (x, y, z)
+                        Column<float, 1>,  // end position, corrected (x, y, z)
                         Column<string, 1>, // start process
                         Column<string, 1>  // end process
   >* fParticleNtuple; ///< particle ntuple
@@ -128,7 +140,20 @@ private:
                         Column<int, 1>,    // hit id
                         Column<int, 1>,    // g4 id
                         Column<float, 1>   // deposited energy [ MeV ]
+                        Column<float, 1>   // energy fraction
   >* fEnergyDepNtuple; ///< energy deposition ntuple
+
+  hep_hpc::hdf5::Ntuple<Column<int, 1>,    // event id (run, subrun, event)
+                        Column<int, 1>,    // tpc id
+                        Column<int, 1>,    // global plane
+                        Column<float, 1>,  // global wire
+                        Column<int, 1>,    // raw plane
+                        Column<float, 1>,  // raw wire
+                        Column<float, 1>   // ADC
+  >* fWireNtuple; ///< Wire ntuple
+
+  void True2RecoMappingXYZ(float& t, float& x, float& y, float& z);
+  void ApplySCEMappingXYZ(float& x, float& y, float& z);
 };
 
 
@@ -138,9 +163,11 @@ HDF5Maker::HDF5Maker(fhicl::ParameterSet const& p)
     fHitLabel(  p.get<string>("HitLabel")),
     fHitTruthLabel(  p.get<string>("HitTruthLabel","")),
     fSPLabel(   p.get<string>("SPLabel")),
-    fUseMap(    p.get<bool>("UseMap", false)),
+    fWireLabel(   p.get<string>("WireLabel")),
+    fUseMap(    p.get<bool>("UseMap",false)),
     fEventInfo( p.get<string>("EventInfo")),
-    fOutputName(p.get<string>("OutputName"))
+    fOutputName(p.get<string>("OutputName")),
+    fXOffset(p.get<float>("fXOffset"))
 {
   if (fEventInfo != "none" && fEventInfo != "nu")
     throw art::Exception(art::errors::Configuration)
@@ -203,21 +230,25 @@ void HDF5Maker::analyze(art::Event const& e)
   // Get spacepoints from the event record
   art::Handle< vector< SpacePoint > > spListHandle;
   vector< art::Ptr< SpacePoint > > splist;
-  if (e.getByLabel(fSPLabel, spListHandle))
-    art::fill_ptr_vector(splist, spListHandle);
+  if (fSPLabel!="") {
+    if (e.getByLabel(fSPLabel, spListHandle))
+      art::fill_ptr_vector(splist, spListHandle);
+  }
 
   // Get hits from the event record
   art::Handle< vector< Hit > > hitListHandle;
   vector< art::Ptr< Hit > > hitlist;
   if (e.getByLabel(fHitLabel, hitListHandle))
     art::fill_ptr_vector(hitlist, hitListHandle);
-
+  
   // Get assocations from spacepoints to hits
-  art::FindManyP< Hit > fmp(spListHandle, e, fSPLabel);
   vector< vector< art::Ptr< Hit > > > sp2Hit(splist.size());
-  for (size_t spIdx = 0; spIdx < sp2Hit.size(); ++spIdx) {
-    sp2Hit[spIdx] = fmp.at(spIdx);
-  } // for spacepoint
+  if (splist.size()>0) {
+    art::FindManyP< Hit > fmp(spListHandle, e, fSPLabel);
+    for (size_t spIdx = 0; spIdx < sp2Hit.size(); ++spIdx) {
+      sp2Hit[spIdx] = fmp.at(spIdx);
+    } // for spacepoint
+  }
 
   // Fill spacepoint table
   for (size_t i = 0; i < splist.size(); ++i) {
@@ -316,6 +347,38 @@ void HDF5Maker::analyze(art::Event const& e)
     } // if using microboone map method or not
   } // for hit
 
+  // Get wires from the event record
+  art::Handle< vector< Wire > > wireListHandle;
+  vector< art::Ptr< Wire > > wirelist;
+  if (e.getByLabel(fWireLabel, wireListHandle))
+    art::fill_ptr_vector(wirelist, wireListHandle);
+  art::ServiceHandle<geo::Geometry> geom;
+
+  // Loop over wires
+  for (art::Ptr< Wire > wire : wirelist) {
+    auto wireid = geom->ChannelToWire(wire->Channel())[0];//fixme
+
+    LogInfo("HDF5Maker") << "Filling wire table"
+			 << "\nrun " << evtID[0] << ", subrun " << evtID[1]
+			 << ", event " << evtID[2]
+			 << ", TPC " << wireid.TPC
+                         << "\nglobal plane " << wire->View()
+			 << ", global wire " << wire->Channel()
+                         << "\nlocal plane " << wireid.Plane
+                         << ", local wire " << wireid.Wire;
+    //for (auto w : wire->SignalROI()) if (w>0) std::cout << w << std::endl;
+    //
+    fWireNtuple->insert(evtID.data(),
+			wireid.TPC,
+			wire->View(),
+			wire->Channel(),
+			wireid.Plane,
+			wireid.Wire,
+			wire->Signal().data()
+    );
+
+  }
+
   ServiceHandle<ParticleInventoryService> pi;
   set<int> allIDs = g4id; // Copy original so we can safely modify it
 
@@ -334,9 +397,18 @@ void HDF5Maker::analyze(art::Event const& e)
     if (p==NULL) continue;
     array<float, 3> particleStart { (float)p->Vx(), (float)p->Vy(), (float)p->Vz() };
     array<float, 3> particleEnd { (float)p->EndX(), (float)p->EndY(), (float)p->EndZ() };
+    //
+    float startT = p->T();
+    float endT = p->EndT();
+    array<float, 3> particleStartCorr { (float)p->Vx(), (float)p->Vy(), (float)p->Vz() };
+    array<float, 3> particleEndCorr { (float)p->EndX(), (float)p->EndY(), (float)p->EndZ() };
+    True2RecoMappingXYZ(startT, particleStartCorr[0], particleStartCorr[1], particleStartCorr[2]);
+    True2RecoMappingXYZ(endT, particleEndCorr[0], particleEndCorr[1], particleEndCorr[2]);
+    //
     fParticleNtuple->insert(evtID.data(),
       abs(id), p->PdgCode(), p->Mother(), (float)p->P(),
       particleStart.data(), particleEnd.data(),
+      particleStartCorr.data(), particleEndCorr.data(),
       p->Process(), p->EndProcess()
     );
     LogInfo("HDF5Maker") << "Filling particle table"
@@ -350,6 +422,11 @@ void HDF5Maker::analyze(art::Event const& e)
                          << ", z " << particleStart[2]
                          << "\nparticle end x " << particleEnd[0] << ", y "
                          << particleEnd[1] << ", z " << particleEnd[2]
+                         << "\nparticle start corr x " << particleStartCorr[0]
+                         << ", y " << particleStartCorr[1]
+                         << ", z " << particleStartCorr[2]
+                         << "\nparticle end corr x " << particleEndCorr[0] << ", y "
+                         << particleEndCorr[1] << ", z " << particleEndCorr[2]
                          << "\nstart process " << p->Process()
                          << ", end process " << p->EndProcess();
   }
@@ -382,13 +459,15 @@ void HDF5Maker::beginSubRun(art::SubRun const& sr) {
         make_column<float>("nu_dir", 3)
     ));
 
-  fSpacePointNtuple = new hep_hpc::hdf5::Ntuple(
-    make_ntuple({fFile, "spacepoint_table", 1000},
-      make_column<int>("event_id", 3),
-      make_scalar_column<int>("spacepoint_id"),
-      make_column<float>("position", 3),
-      make_column<int>("hit_id", 3)
-  ));
+  if (fSPLabel!="") {
+    fSpacePointNtuple = new hep_hpc::hdf5::Ntuple(
+      make_ntuple({fFile, "spacepoint_table", 1000},
+	make_column<int>("event_id", 3),
+	make_scalar_column<int>("spacepoint_id"),
+        make_column<float>("position", 3),
+        make_column<int>("hit_id", 3)
+    ));
+  }
 
   fHitNtuple = new hep_hpc::hdf5::Ntuple(
     make_ntuple({fFile, "hit_table", 1000},
@@ -414,6 +493,8 @@ void HDF5Maker::beginSubRun(art::SubRun const& sr) {
       make_scalar_column<float>("momentum"),
       make_column<float>("start_position", 3),
       make_column<float>("end_position", 3),
+      make_column<float>("start_position_corr", 3),
+      make_column<float>("end_position_corr", 3),
       make_scalar_column<string>("start_process"),
       make_scalar_column<string>("end_process")
   ));
@@ -425,16 +506,59 @@ void HDF5Maker::beginSubRun(art::SubRun const& sr) {
       make_scalar_column<int>("g4_id"),
       make_scalar_column<float>("energy")
   ));
+
+  fWireNtuple = new hep_hpc::hdf5::Ntuple(
+    make_ntuple({fFile, "wire_table", 1000},
+      make_column<int>("event_id", 3),
+      make_scalar_column<int>("tpc"),
+      make_scalar_column<int>("global_plane"),
+      make_scalar_column<float>("global_wire"),
+      make_scalar_column<int>("local_plane"),
+      make_scalar_column<float>("local_wire"),
+      make_column<float>("adc", ServiceHandle<DetectorPropertiesService>()->DataForJob().ReadOutWindowSize())
+  ));
 }
 
 void HDF5Maker::endSubRun(art::SubRun const& sr) {
   if (fEventInfo == "none") delete fEventNtuple;
   if (fEventInfo == "nu") delete fEventNtupleNu;
-  delete fSpacePointNtuple;
+  delete fEventNtuple;
+  if (fSPLabel!="") delete fSpacePointNtuple;
   delete fHitNtuple;
   delete fParticleNtuple;
   delete fEnergyDepNtuple;
+  delete fWireNtuple;
   fFile.close();
+}
+
+// apply the mapping of XYZ true -> XYZ position as it would be recosntructed.
+// takes into account SCE, trigger time offset, and wirecell-pandora offset.
+// to be applied to truth xyz in order to compare to reconstructed variables
+// e.g. used for resolution plots
+void HDF5Maker::True2RecoMappingXYZ(float& t, float& x, float& y, float& z)
+{
+  ApplySCEMappingXYZ(x, y, z);
+  auto const &detProperties = ServiceHandle<DetectorPropertiesService>();
+  auto const &detClocks     = ServiceHandle<DetectorClocksService>();
+  double g4Ticks = detClocks->DataForJob().TPCG4Time2Tick(t) + detProperties->DataForJob().GetXTicksOffset(0, 0, 0) - detClocks->DataForJob().TriggerOffsetTPC();
+  float _xtimeoffset = detProperties->DataForJob().ConvertTicksToX(g4Ticks, 0, 0, 0);
+  x += _xtimeoffset;
+  x += fXOffset;
+}
+
+// apply the mapping of XYZ true -> XYZ position after SCE-induced shift.
+// to be applied to truth xyz in order to compare to reconstructed variables
+// e.g. used for resolution plots
+void HDF5Maker::ApplySCEMappingXYZ(float& x, float& y, float& z)
+{
+  auto const *SCE = lar::providerFrom<spacecharge::SpaceChargeService>();
+  if (SCE->EnableSimSpatialSCE() == true)
+    {
+      auto offset = SCE->GetPosOffsets(geo::Point_t(x, y, z));
+      x -= offset.X();
+      y += offset.Y();
+      z += offset.Z();
+    }
 }
 
 DEFINE_ART_MODULE(HDF5Maker)

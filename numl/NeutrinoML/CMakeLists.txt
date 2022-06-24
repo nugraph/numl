@@ -23,8 +23,11 @@ simple_plugin(HDF5Maker "module"
     cetlib_except
     ${ROOT_BASIC_LIB_LIST}
     nusimdata_SimulationBase
+    lardataobj_RecoBase
+    larcorealg_Geometry
     larsim_MCCheater_BackTrackerService_service           
     larsim_MCCheater_ParticleInventoryService_service
+    lardataalg_DetectorInfo
     ${HEP_HPC_HDF5_LIB}
     ${HDF5_LIB}
 )
