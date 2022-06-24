@@ -167,7 +167,7 @@ HDF5Maker::HDF5Maker(fhicl::ParameterSet const& p)
     fUseMap(    p.get<bool>("UseMap",false)),
     fEventInfo( p.get<string>("EventInfo")),
     fOutputName(p.get<string>("OutputName")),
-    fXOffset(p.get<float>("fXOffset"))
+    fXOffset(p.get<float>("XOffset"))
 {
   if (fEventInfo != "none" && fEventInfo != "nu")
     throw art::Exception(art::errors::Configuration)
@@ -525,7 +525,6 @@ void HDF5Maker::beginSubRun(art::SubRun const& sr) {
 void HDF5Maker::endSubRun(art::SubRun const& sr) {
   if (fEventInfo == "none") delete fEventNtuple;
   if (fEventInfo == "nu") delete fEventNtupleNu;
-  delete fEventNtuple;
   if (fSPLabel!="") delete fSpacePointNtuple;
   delete fHitNtuple;
   delete fParticleNtuple;
