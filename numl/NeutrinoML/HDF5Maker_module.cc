@@ -139,7 +139,7 @@ private:
   hep_hpc::hdf5::Ntuple<Column<int, 1>,    // event id (run, subrun, event)
                         Column<int, 1>,    // hit id
                         Column<int, 1>,    // g4 id
-                        Column<float, 1>   // deposited energy [ MeV ]
+                        Column<float, 1>,  // deposited energy [ MeV ]
                         Column<float, 1>   // energy fraction
   >* fEnergyDepNtuple; ///< energy deposition ntuple
 
@@ -322,27 +322,29 @@ void HDF5Maker::analyze(art::Event const& e)
       for (size_t i_p = 0; i_p < particle_vec.size(); ++i_p) {
 	g4id.insert(particle_vec[i_p]->TrackId());
 	fEnergyDepNtuple->insert(evtID.data(),
-		hit.key(), particle_vec[i_p]->TrackId(), match_vec[i_p]->ideFraction
+		hit.key(), particle_vec[i_p]->TrackId(), match_vec[i_p]->energy, match_vec[i_p]->ideFraction
 	);
 	LogInfo("HDF5Maker") << "Filling energy deposit table"
 			     << "\nrun " << evtID[0] << ", subrun " << evtID[1]
 			     << ", event " << evtID[2]
 			     << "\nhit id " << hit.key() << ", g4 id "
-			     << particle_vec[i_p]->TrackId() << ", energy fraction "
+			     << particle_vec[i_p]->TrackId() << ", energy "
+			     << match_vec[i_p]->energy << ", energy fraction "
 			     << match_vec[i_p]->ideFraction;
       }
     } else {
       for (const TrackIDE& ide : bt->HitToTrackIDEs(clockData, hit)) {
 	g4id.insert(ide.trackID);
 	fEnergyDepNtuple->insert(evtID.data(),
-		hit.key(), ide.trackID, ide.energy
-  );
+		hit.key(), ide.trackID, ide.energy, ide.energyFrac
+	);
 	LogInfo("HDF5Maker") << "Filling energy deposit table"
 			     << "\nrun " << evtID[0] << ", subrun " << evtID[1]
 			     << ", event " << evtID[2]
 			     << "\nhit id " << hit.key() << ", g4 id "
 			     << ide.trackID << ", energy "
-			     << ide.energy << " MeV";
+			     << ide.energy << " MeV" << ", energy fraction "
+			     << ide.energyFrac;
       } // for energy deposit
     } // if using microboone map method or not
   } // for hit
@@ -504,7 +506,8 @@ void HDF5Maker::beginSubRun(art::SubRun const& sr) {
       make_column<int>("event_id", 3),
       make_scalar_column<int>("hit_id"),
       make_scalar_column<int>("g4_id"),
-      make_scalar_column<float>("energy")
+      make_scalar_column<float>("energy"),
+      make_scalar_column<float>("energy_fraction")
   ));
 
   fWireNtuple = new hep_hpc::hdf5::Ntuple(
