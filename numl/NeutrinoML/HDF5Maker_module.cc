@@ -21,7 +21,15 @@
 #include "nusimdata/SimulationBase/MCTruth.h"
 #include "lardataobj/RecoBase/Hit.h"
 #include "lardataobj/RecoBase/SpacePoint.h"
+#include "lardataobj/RecoBase/Slice.h"
+#include "lardataobj/RecoBase/PFParticle.h"
+#include "lardataobj/RecoBase/Vertex.h"
+#include "lardataobj/RecoBase/Cluster.h"
+#include "lardata/RecoBaseProxy/ProxyBase.h"
+#include "lardataobj/RecoBase/PFParticleMetadata.h"
 #include "lardataobj/RecoBase/Wire.h"
+#include "lardataobj/RecoBase/OpHit.h"
+#include "lardataobj/RecoBase/OpFlash.h"
 
 #include "larsim/MCCheater/BackTrackerService.h"
 #include "larsim/MCCheater/ParticleInventoryService.h"
@@ -48,6 +56,8 @@ using simb::MCParticle;
 using simb::MCTruth;
 using sim::TrackIDE;
 using recob::Hit;
+using recob::OpHit;
+using recob::OpFlash;
 using recob::SpacePoint;
 using recob::Wire;
 
@@ -85,6 +95,8 @@ private:
   string fHitTruthLabel;
   string fSPLabel;
   string fWireLabel;
+  string fOpHitLabel;
+  string fOpFlashLabel;
 
   bool fUseMap;
   string fEventInfo;
@@ -101,7 +113,11 @@ private:
                         Column<int, 1>,    // is cc
                         Column<float, 1>,  // nu energy
                         Column<float, 1>,  // lep energy
-                        Column<float, 1>   // nu dir (x, y, z)
+                        Column<float, 1>,  // nu dir (x, y, z)
+                        Column<float, 1>,  // nu vertex position (x, y, z)
+                        Column<float, 1>,  // nu vertex position, corrected (x, y, z)
+			Column<int, 1>,    // nu vertex corrected wire pos
+			Column<float, 1>   // nu vertex corrected wire time
   >* fEventNtupleNu; ///< event ntuple with neutrino information
 
   hep_hpc::hdf5::Ntuple<Column<int, 1>,    // event id (run, subrun, event)
@@ -115,9 +131,9 @@ private:
                         Column<float, 1>,  // hit integral
                         Column<float, 1>,  // hit rms
                         Column<int, 1>,    // tpc id
-                        Column<int, 1>,    // global plane
-                        Column<float, 1>,  // global wire
-                        Column<float, 1>,  // global time
+                        // Column<int, 1>,    // global plane
+                        // Column<float, 1>,  // global wire
+                        // Column<float, 1>,  // global time
                         Column<int, 1>,    // raw plane
                         Column<float, 1>,  // raw wire
                         Column<float, 1>   // raw time
@@ -132,6 +148,10 @@ private:
                         Column<float, 1>,  // end position (x, y, z)
                         Column<float, 1>,  // start position, corrected (x, y, z)
                         Column<float, 1>,  // end position, corrected (x, y, z)
+			Column<int, 1>,    // start corrected wire pos
+			Column<int, 1>,    // end corrected wire pos
+			Column<float, 1>,  // start corrected wire time
+			Column<float, 1>,  // end corrected wire time
                         Column<string, 1>, // start process
                         Column<string, 1>  // end process
   >* fParticleNtuple; ///< particle ntuple
@@ -145,15 +165,85 @@ private:
 
   hep_hpc::hdf5::Ntuple<Column<int, 1>,    // event id (run, subrun, event)
                         Column<int, 1>,    // tpc id
-                        Column<int, 1>,    // global plane
-                        Column<float, 1>,  // global wire
+                        // Column<int, 1>,    // global plane
+                        // Column<float, 1>,  // global wire
                         Column<int, 1>,    // raw plane
                         Column<float, 1>,  // raw wire
                         Column<float, 1>   // ADC
   >* fWireNtuple; ///< Wire ntuple
 
+  hep_hpc::hdf5::Ntuple<Column<int, 1>,    // event id (run, subrun, event)
+                        Column<int, 1>,    // hit id
+			Column<int, 1>,    // hit_channel
+			Column<int, 1>,    // wire pos
+			Column<float, 1>,  // peaktime
+			Column<float, 1>,  // width
+			Column<float, 1>,  // area
+			Column<float, 1>,  // amplitude
+			Column<float, 1>   // pe
+  >* fOpHitNtuple; ///< PMT hit ntuple
+
+  hep_hpc::hdf5::Ntuple<Column<int, 1>,    // event id (run, subrun, event)
+                        Column<int, 1>,    // flash id
+			Column<int, 1>,    // wire pos
+			Column<float, 1>,  // time
+			Column<float, 1>,  // time width
+			Column<float, 1>,  // Y center
+			Column<float, 1>,  // Y width
+			Column<float, 1>,  // Z center
+			Column<float, 1>,  // Z width
+			Column<float, 1>,  // pe in each PMT
+			Column<float, 1>   // totalpe
+  >* fOpFlashNtuple; ///< Flash ntuple
+
+  hep_hpc::hdf5::Ntuple<Column<int, 1>,    // event id (run, subrun, event)
+                        Column<int, 1>,    // slice id
+                        Column<int, 1>,    // pdg
+                        Column<float, 1>,  // neutrino score
+                        Column<float, 1>,  // primary vertex position (x, y, z)
+			Column<int, 1>,    // primary vertex wire pos
+			Column<float, 1>   // primary vertex wire time
+  >* fPandoraPrimaryNtuple; ///< Pandora primary ntuple
+
+  hep_hpc::hdf5::Ntuple<Column<int, 1>,    // event id (run, subrun, event)
+                        Column<int, 1>,    // pfp id
+                        Column<int, 1>,    // pdg
+                        Column<float, 1>,  // track-shower score
+                        Column<float, 1>,  // pfp vertex position (x, y, z)
+			Column<int, 1>,    // pfp vertex wire pos
+			Column<float, 1>   // pfp vertex wire time
+  >* fPandoraPfpNtuple; ///< Pandora neutrino slice ntuple
+
+  hep_hpc::hdf5::Ntuple<Column<int, 1>,    // event id (run, subrun, event)
+                        Column<int, 1>,    // hit id
+                        Column<int, 1>,    // slice id
+                        Column<int, 1>     // pfp id
+  >* fPandoraHitNtuple; ///< Pandora hit slice and cluster ntuple
+
+
+  // slice hits
+  // neutrino vertex
+  // pandora track hits
+  // pandora shower hits
+
+  using ProxyPfpColl_t = decltype(proxy::getCollection<std::vector<recob::PFParticle> >(
+                std::declval<art::Event>(),std::declval<art::InputTag>(),
+                proxy::withAssociated<larpandoraobj::PFParticleMetadata>(std::declval<art::InputTag>()),
+                proxy::withAssociated<recob::Slice>(std::declval<art::InputTag>()),
+                proxy::withAssociated<recob::Cluster>(std::declval<art::InputTag>()),
+                proxy::withAssociated<recob::Vertex>(std::declval<art::InputTag>()) ));
+  using ProxyPfpElem_t = ProxyPfpColl_t::element_proxy_t;
+
+  // proxy to connect cluster to hit
+  using ProxyClusColl_t = decltype(proxy::getCollection<std::vector<recob::Cluster>>(
+      std::declval<art::Event>(), std::declval<art::InputTag>(),
+      proxy::withAssociated<recob::Hit>(std::declval<art::InputTag>())));
+  using ProxyClusElem_t = ProxyClusColl_t::element_proxy_t;
+
   void True2RecoMappingXYZ(float& t, float& x, float& y, float& z);
   void ApplySCEMappingXYZ(float& x, float& y, float& z);
+  void AddDaughters(const std::map<unsigned int, unsigned int>& pfpmap, const ProxyPfpElem_t &pfp_pxy, const ProxyPfpColl_t &pfp_pxy_col, std::vector<ProxyPfpElem_t> &slice_v);
+  float GetMetaData(const ProxyPfpElem_t &pfp_pxy, string metaDataName);
 };
 
 
@@ -164,6 +254,8 @@ HDF5Maker::HDF5Maker(fhicl::ParameterSet const& p)
     fHitTruthLabel(  p.get<string>("HitTruthLabel","")),
     fSPLabel(   p.get<string>("SPLabel")),
     fWireLabel(   p.get<string>("WireLabel")),
+    fOpHitLabel(  p.get<string>("OpHitLabel")),
+    fOpFlashLabel(  p.get<string>("OpFlashLabel")),
     fUseMap(    p.get<bool>("UseMap",false)),
     fEventInfo( p.get<string>("EventInfo")),
     fOutputName(p.get<string>("OutputName")),
@@ -181,6 +273,9 @@ void HDF5Maker::analyze(art::Event const& e)
     art::ServiceHandle<cheat::BackTrackerService> bt_h;
     bt = bt_h.get();
   }
+  art::ServiceHandle<geo::Geometry> geo;
+  auto const clockData = ServiceHandle<DetectorClocksService>()->DataFor(e);
+  auto const detProp = ServiceHandle<DetectorPropertiesService>()->DataFor(e, clockData);
 
   int run = e.id().run();
   int subrun = e.id().subRun();
@@ -211,11 +306,32 @@ void HDF5Maker::analyze(art::Event const& e)
       (float)nutruth.Nu().Momentum().Vect().Unit().Z()
     };
 
+    array<float, 3> nuVtx { (float)nutruth.Nu().Vx(), (float)nutruth.Nu().Vy(), (float)nutruth.Nu().Vz() };
+    
+    float nuT = nutruth.Nu().T();
+    array<float, 3> nuVtxCorr { (float)nutruth.Nu().Vx(), (float)nutruth.Nu().Vy(), (float)nutruth.Nu().Vz() };
+    True2RecoMappingXYZ(nuT, nuVtxCorr[0], nuVtxCorr[1], nuVtxCorr[2]);
+
+    std::cout << "nu vtx pos=" << nuVtx[0] << " " <<  nuVtx[1] << " " << nuVtx[2] << std::endl;
+    std::cout << "nu vtx pos corr=" << nuVtxCorr[0] << " " <<  nuVtxCorr[1] << " " << nuVtxCorr[2] << std::endl;
+
+    double g4Ticks = clockData.TPCG4Time2Tick(nuT) + detProp.GetXTicksOffset(0, 0, 0) - clockData.TriggerOffsetTPC();
+    std::cout << "TPCG4Time2Tick=" << clockData.TPCG4Time2Tick(nuT) << " GetXTicksOffset=" << detProp.GetXTicksOffset(0, 0, 0) << " TriggerOffsetTPC=" << clockData.TriggerOffsetTPC() << std::endl;
+    std::cout << "nuT=" << nuT << " x->t =" << detProp.ConvertXToTicks(nutruth.Nu().Vx(), 0, 0, 0) << " g4Ticks=" << g4Ticks << " Offset=" << detProp.ConvertXToTicks(fXOffset,0,0,0) << std::endl;
+
+    vector<int> nearwires;
+    for (auto p : geo->IteratePlaneIDs()) nearwires.push_back(geo->NearestWire(nuVtxCorr.data(),p));
+    std::cout << "nearwires=" << nearwires[0] << " " << nearwires[1] << " " << nearwires[2] << std::endl;
+
     fEventNtupleNu->insert( evtID.data(),
       nutruth.CCNC() == simb::kCC,
       nutruth.Nu().E(),
       nutruth.Lepton().E(),
-      nuMomentum.data()
+      nuMomentum.data(),
+      nuVtx.data(),
+      nuVtxCorr.data(),
+      nearwires.data(),
+      detProp.ConvertXToTicks(nutruth.Nu().Vx(), 0, 0, 0) //use Corr?
     );
     LogInfo("HDF5Maker") << "Filling event table"
                          << "\nrun " << evtID[0] << ", subrun " << evtID[1]
@@ -279,8 +395,6 @@ void HDF5Maker::analyze(art::Event const& e)
   } // for spacepoint
 
   std::set<int> g4id;
-  auto const clockData = ServiceHandle<DetectorClocksService>()->DataFor(e);
-  auto const detProp = ServiceHandle<DetectorPropertiesService>()->DataFor(e, clockData);
 
   std::unique_ptr<art::FindManyP<simb::MCParticle, anab::BackTrackerHitMatchingData>> hittruth;
   if (fUseMap) {
@@ -297,7 +411,7 @@ void HDF5Maker::analyze(art::Event const& e)
     double time = hit->PeakTime();
     fHitNtuple->insert(evtID.data(),
       hit.key(), hit->Integral(), hit->RMS(), wireid.TPC,
-      plane, wire, time,
+      // plane, wire, time,
       wireid.Plane, wireid.Wire, hit->PeakTime()
     );
 
@@ -324,7 +438,8 @@ void HDF5Maker::analyze(art::Event const& e)
 	fEnergyDepNtuple->insert(evtID.data(),
 		hit.key(), particle_vec[i_p]->TrackId(), match_vec[i_p]->energy, match_vec[i_p]->ideFraction
 	);
-	LogInfo("HDF5Maker") << "Filling energy deposit table"
+	// LogInfo("HDF5Maker") << "Filling energy deposit table"
+	std::cout << "\nFilling energy deposit table"
 			     << "\nrun " << evtID[0] << ", subrun " << evtID[1]
 			     << ", event " << evtID[2]
 			     << "\nhit id " << hit.key() << ", g4 id "
@@ -349,16 +464,167 @@ void HDF5Maker::analyze(art::Event const& e)
     } // if using microboone map method or not
   } // for hit
 
+  string fPandoraLabel = "pandora";
+  art::ValidHandle<std::vector<recob::PFParticle>> inputPfParticle = e.getValidHandle<std::vector<recob::PFParticle>>(fPandoraLabel);
+  std::cout << "N pfps = " << inputPfParticle->size() << std::endl;
+
+  art::ValidHandle<std::vector<recob::Slice>> inputSlice = e.getValidHandle<std::vector<recob::Slice>>(fPandoraLabel);
+  std::cout << "N slices = " << inputSlice->size() << std::endl;
+  auto assocSliceHit = std::unique_ptr<art::FindManyP<recob::Hit>>(new art::FindManyP<recob::Hit>(inputSlice, e, fPandoraLabel));
+ 
+  // grab PFParticles in event
+  art::InputTag fPandoraTag(fPandoraLabel);
+  ProxyPfpColl_t const &pfp_pxy_col = proxy::getCollection<std::vector<recob::PFParticle>>(e, fPandoraTag,
+											   proxy::withAssociated<larpandoraobj::PFParticleMetadata>(fPandoraTag),
+											   proxy::withAssociated<recob::Slice>(fPandoraTag),
+											   proxy::withAssociated<recob::Cluster>(fPandoraTag),
+											   proxy::withAssociated<recob::Vertex>(fPandoraTag)
+											   );
+  ProxyClusColl_t const &clus_proxy = proxy::getCollection<std::vector<recob::Cluster> >(e, fPandoraTag, proxy::withAssociated<recob::Hit>(fPandoraTag));
+
+  // Build PFP Map
+  std::map<unsigned int, unsigned int> pfpmap;
+  unsigned int p = 0;
+  for (const auto &pfp_pxy : pfp_pxy_col) { pfpmap[pfp_pxy->Self()] = p; p++; }
+
+  vector<int> hit_slice_idx(hitlist.size(),-1);
+  for (size_t is = 0; is<inputSlice->size();is++) {
+    auto slicehit = assocSliceHit->at(is);
+    std::cout << "Slice ID=" << is << " N slice hits=" << slicehit.size() << std::endl;
+    for (unsigned int isl = 0; isl < slicehit.size(); isl++)
+      {
+	const auto &slhit = slicehit.at(isl);
+	hit_slice_idx[slhit.key()] = is;
+	/*if (false)*/ std::cout << slhit.key() << " " << slhit->PeakTime() << std::endl;
+      }
+  }
+  vector<int> hit_pfp_idx(hitlist.size(),-1);
+  
+  // loop through PFParticles
+  for (const ProxyPfpElem_t &pfp_pxy : pfp_pxy_col)
+  {
+
+    // // get metadata for this PFP
+    // const auto &pfParticleMetadataList = pfp_pxy.get<larpandoraobj::PFParticleMetadata>();
+
+    if (pfp_pxy->IsPrimary() == false) continue;
+
+    auto slices = pfp_pxy.get<recob::Slice>();
+    if (slices.size() != 1)
+      {
+	std::cout << "WRONG!!! n slices = " << slices.size() << std::endl;
+      }
+
+    std::cout << "slice id = " << slices[0].key() << " pdg=" << pfp_pxy->PdgCode() << std::endl;
+    std::cout << "isNeutrino = " << GetMetaData(pfp_pxy, "IsNeutrino") << std::endl;
+    std::cout << "slice topo score = " << GetMetaData(pfp_pxy, "NuScore") << std::endl;
+
+    float nvx[3] = {-999.,-999.,-999.};
+    vector<int> nearwires;
+    auto nuvtx = pfp_pxy.get<recob::Vertex>();
+    if (nuvtx.size() != 1)
+      {
+	std::cout << "Found primary PFP w/ != 1 associated vertices..." << std::endl;
+      }
+    else {
+      std::cout << "Vertex pos = " << nuvtx.at(0)->position() << " key=" << nuvtx.at(0).key() << std::endl;
+      nvx[0] = nuvtx.at(0)->position().X();
+      nvx[1] = nuvtx.at(0)->position().Y();
+      nvx[2] = nuvtx.at(0)->position().Z();
+      for (auto p : geo->IteratePlaneIDs()) nearwires.push_back(geo->NearestWire(nvx,p));
+    }
+
+    fPandoraPrimaryNtuple->insert( evtID.data(),
+      slices[0].key(),
+      pfp_pxy->PdgCode(),
+      GetMetaData(pfp_pxy, "NuScore"),
+      nvx,
+      nearwires.data(),
+      detProp.ConvertXToTicks(nvx[0], 0, 0, 0)
+    );
+    // LogInfo("HDF5Maker") << "Filling event table"
+    //                      << "\nrun " << evtID[0] << ", subrun " << evtID[1]
+    //                      << ", event " << evtID[2]
+    //                      << "\nis cc? " << (nutruth.CCNC() == simb::kCC)
+    //                      << ", nu energy " << nutruth.Nu().E()
+    //                      << ", lepton energy " << nutruth.Lepton().E()
+    //                      << "\nnu momentum x " << nuMomentum[0] << ", y "
+    //                      << nuMomentum[1] << ", z " << nuMomentum[2];
+
+    //  find neutrino candidate
+    auto PDG = fabs(pfp_pxy->PdgCode());
+    if ( PDG != 12 && PDG != 14 ) continue;
+
+    auto slicehit = assocSliceHit->at(slices[0].key());
+    std::cout << "Neutrino slice ID=" << slices[0].key() << " N slice hits=" << slicehit.size() << std::endl;
+ 
+    // collect PFParticle hierarchy originating from this neutrino candidate
+    std::vector<ProxyPfpElem_t> slice_pfp_v;
+    AddDaughters(pfpmap, pfp_pxy, pfp_pxy_col, slice_pfp_v);
+
+    for (auto pfp : slice_pfp_v)
+      {
+	if (pfp->PdgCode()==12 || pfp->PdgCode()==14) continue;
+	std::cout << "pfp pdg=" << pfp->PdgCode() << " track-shower score = " << GetMetaData(pfp, "TrackScore") << std::endl;
+	auto clus_pxy_v = pfp.get<recob::Cluster>();
+	for (auto ass_clus : clus_pxy_v)
+	  {
+	    const auto &clus = clus_proxy[ass_clus.key()];
+	    auto clushit_v = clus.get<recob::Hit>();
+	    std::cout << "cluster with size = " << clushit_v.size() << std::endl;
+	    for (unsigned int icl = 0; icl < clushit_v.size(); icl++)
+	      {
+		const auto &clhit = clushit_v.at(icl);
+		hit_pfp_idx[clhit.key()] = pfp.index();
+		if (false) std::cout << clhit.key() << std::endl;
+	      }
+	  }
+	auto pvtx = pfp.get<recob::Vertex>();
+	if (pvtx.size() != 1)
+	  {
+	    std::cout << "ERROR. Found neutrino PFP w/ != 1 associated vertices..." << std::endl;
+	  }
+	std::cout << "Vertex pos = " << pvtx.at(0)->position() << " key=" << pvtx.at(0).key() << std::endl;
+	float pvx[3] = {(float)pvtx.at(0)->position().X(),(float)pvtx.at(0)->position().Y(),(float)pvtx.at(0)->position().Z()};
+	vector<int> nearwires;
+	for (auto p : geo->IteratePlaneIDs()) nearwires.push_back(geo->NearestWire(pvx,p));
+
+	fPandoraPfpNtuple->insert( evtID.data(),
+	  pfp.index(),
+	  pfp->PdgCode(),
+	  GetMetaData(pfp, "TrackScore"),
+          pvx,
+          nearwires.data(),
+          detProp.ConvertXToTicks(pvx[0], 0, 0, 0)
+	);
+	// LogInfo("HDF5Maker") << "Filling event table"
+	//                      << "\nrun " << evtID[0] << ", subrun " << evtID[1]
+	//                      << ", event " << evtID[2]
+	//                      << "\nis cc? " << (nutruth.CCNC() == simb::kCC)
+	//                      << ", nu energy " << nutruth.Nu().E()
+	//                      << ", lepton energy " << nutruth.Lepton().E()
+	//                      << "\nnu momentum x " << nuMomentum[0] << ", y "
+	//                      << nuMomentum[1] << ", z " << nuMomentum[2];
+      } // for all PFParticles in the slice
+  } // for all PFParticles
+
+  for (art::Ptr< Hit > hit : hitlist) {
+    fPandoraHitNtuple->insert( evtID.data(),
+      hit.key(),
+      hit_slice_idx[hit.key()],
+      hit_pfp_idx[hit.key()]
+    );
+  }
+
   // Get wires from the event record
   art::Handle< vector< Wire > > wireListHandle;
   vector< art::Ptr< Wire > > wirelist;
   if (e.getByLabel(fWireLabel, wireListHandle))
     art::fill_ptr_vector(wirelist, wireListHandle);
-  art::ServiceHandle<geo::Geometry> geom;
 
   // Loop over wires
   for (art::Ptr< Wire > wire : wirelist) {
-    auto wireid = geom->ChannelToWire(wire->Channel())[0];//fixme
+    auto wireid = geo->ChannelToWire(wire->Channel())[0];//fixme
 
     LogInfo("HDF5Maker") << "Filling wire table"
 			 << "\nrun " << evtID[0] << ", subrun " << evtID[1]
@@ -372,8 +638,8 @@ void HDF5Maker::analyze(art::Event const& e)
     //
     fWireNtuple->insert(evtID.data(),
 			wireid.TPC,
-			wire->View(),
-			wire->Channel(),
+			// wire->View(),
+			// wire->Channel(),
 			wireid.Plane,
 			wireid.Wire,
 			wire->Signal().data()
@@ -406,11 +672,19 @@ void HDF5Maker::analyze(art::Event const& e)
     array<float, 3> particleEndCorr { (float)p->EndX(), (float)p->EndY(), (float)p->EndZ() };
     True2RecoMappingXYZ(startT, particleStartCorr[0], particleStartCorr[1], particleStartCorr[2]);
     True2RecoMappingXYZ(endT, particleEndCorr[0], particleEndCorr[1], particleEndCorr[2]);
+
+    vector<int> nearwires_start;
+    for (auto ip : geo->IteratePlaneIDs()) nearwires_start.push_back(geo->NearestWire(particleStartCorr.data(),ip));
+    vector<int> nearwires_end;
+    for (auto ip : geo->IteratePlaneIDs()) nearwires_end.push_back(geo->NearestWire(particleEndCorr.data(),ip));
+
     //
     fParticleNtuple->insert(evtID.data(),
       abs(id), p->PdgCode(), p->Mother(), (float)p->P(),
       particleStart.data(), particleEnd.data(),
       particleStartCorr.data(), particleEndCorr.data(),
+      nearwires_start.data(),nearwires_end.data(),
+      detProp.ConvertXToTicks(particleStart[0], 0, 0, 0), detProp.ConvertXToTicks(particleEnd[0], 0, 0, 0),//use Corr?
       p->Process(), p->EndProcess()
     );
     LogInfo("HDF5Maker") << "Filling particle table"
@@ -432,6 +706,78 @@ void HDF5Maker::analyze(art::Event const& e)
                          << "\nstart process " << p->Process()
                          << ", end process " << p->EndProcess();
   }
+
+  // Get OpHits from the event record
+  art::Handle< vector< OpHit > > opHitListHandle;
+  vector< art::Ptr< OpHit > > ophitlist;
+  if (e.getByLabel(fOpHitLabel, opHitListHandle))
+    art::fill_ptr_vector(ophitlist, opHitListHandle);
+  //std::cout << "ophits size=" << ophitlist.size() << std::endl;
+  // Loop over ophits
+  for (art::Ptr< OpHit > ophit : ophitlist) {
+    vector<int> nearwires;
+    double xyz[3] = {0.,0.,0.};
+    geo->OpDetGeoFromOpChannel(ophit->OpChannel()).GetCenter(xyz);
+    for (auto p : geo->IteratePlaneIDs()) nearwires.push_back(geo->NearestWire(xyz,p));
+    // Fill ophit table
+    fOpHitNtuple->insert(evtID.data(),ophit.key(),
+			 nearwires.data(),
+			 ophit->OpChannel(),ophit->PeakTime(),ophit->Width(),
+			 ophit->Area(),ophit->Amplitude(),ophit->PE()
+    );
+    LogInfo("HDF5Maker") << "Filling ophit table"
+                         << "\nrun " << evtID[0] << ", subrun " << evtID[1]
+                         << ", event " << evtID[2]
+                         << "\nhit id " << ophit.key() << ", channel "
+                         << ophit->OpChannel() << ", PeakTime " << ophit->PeakTime()
+                         << ", Width " << ophit->Width()
+                         << "\narea " << ophit->Area() << ", amplitude "
+                         << ophit->Amplitude() << ", PE " << ophit->PE();
+    // std::cout << std::endl;
+    // std::cout << "det center " << xyz[0] << " " << xyz[1] << " " << xyz[2] << std::endl;
+    // std::cout << "nearest wires " << geo->NearestWire(xyz,0) << " " << geo->NearestWire(xyz,1) << " " << geo->NearestWire(xyz,2) << std::endl;
+    // for (auto p : geo->IteratePlaneIDs()) std::cout << "planeid " <<  p << " near wire " << geo->NearestWire(xyz,p) << std::endl;
+  }
+
+  // Get OpFlashs from the event record
+  art::Handle< vector< OpFlash > > opFlashListHandle;
+  vector< art::Ptr< OpFlash > > opflashlist;
+  if (e.getByLabel(fOpFlashLabel, opFlashListHandle))
+    art::fill_ptr_vector(opflashlist, opFlashListHandle);
+  // Loop over opflashs
+  //std::cout << "opflashs size=" << opflashlist.size() << std::endl;
+  for (art::Ptr< OpFlash > opflash : opflashlist) {
+    vector<float> pes;
+    for (auto pe : opflash->PEs()) pes.push_back(pe);
+    vector<int> nearwires;
+    double xyz[3] = {0.,opflash->YCenter(),opflash->ZCenter()};
+    for (auto p : geo->IteratePlaneIDs()) nearwires.push_back(geo->NearestWire(xyz,p));
+    // Fill opflash table
+    fOpFlashNtuple->insert(evtID.data(),
+			   opflash.key(),
+			   nearwires.data(),
+			   opflash->Time(),opflash->TimeWidth(),
+			   opflash->YCenter(),opflash->YWidth(),opflash->ZCenter(),opflash->ZWidth(),
+			   pes.data(),opflash->TotalPE()
+    );
+    //std::cout << "PE vec size=" << opflash->PEs().size() << std::endl;
+    // LogInfo("HDF5Maker") << "Filling opflash table"
+    std::cout << "\nFilling opflash table"
+                         << "\nrun " << evtID[0] << ", subrun " << evtID[1]
+                         << ", event " << evtID[2]
+                         << "\nflash id " << opflash.key() << ", Time " << opflash->Time()
+			 << ", TotalPE " << opflash->TotalPE()//;
+			 << "\nWireCenters size0 " << opflash->WireCenters().size()//;
+			 << "\nYCenter " << opflash->YCenter()<< " ZCenter " << opflash->ZCenter()
+			 << "\nYWidth " << opflash->YWidth()<< " ZWidth " << opflash->ZWidth()
+			 << "\nInBeamFrame " << opflash->InBeamFrame()<< " OnBeamTime " << opflash->OnBeamTime()
+			 << "\nAbsTime " << opflash->AbsTime() << " TimeWidth " << opflash->TimeWidth() << " FastToTotal " << opflash->FastToTotal();
+    //std::cout << std::endl; for (auto pe : opflash->PEs()) {std::cout << pe << " ";} std::cout << std::endl;
+    // for (auto p : geo->IteratePlaneIDs()) std::cout << "planeid " <<  p << " near wire " << geo->NearestWire(xyz,p) << std::endl;
+  }
+
+
+
 } // function HDF5Maker::analyze
 
 void HDF5Maker::beginSubRun(art::SubRun const& sr) {
@@ -458,7 +804,11 @@ void HDF5Maker::beginSubRun(art::SubRun const& sr) {
         make_scalar_column<int>("is_cc"),
         make_scalar_column<float>("nu_energy"),
         make_scalar_column<float>("lep_energy"),
-        make_column<float>("nu_dir", 3)
+        make_column<float>("nu_dir", 3),
+        make_column<float>("nu_vtx", 3),
+        make_column<float>("nu_vtx_corr", 3),
+        make_column<int>("nu_vtx_wire_pos", ServiceHandle<geo::Geometry>()->Nviews()),
+        make_scalar_column<float>("nu_vtx_wire_time")
     ));
 
   if (fSPLabel!="") {
@@ -467,7 +817,7 @@ void HDF5Maker::beginSubRun(art::SubRun const& sr) {
 	make_column<int>("event_id", 3),
 	make_scalar_column<int>("spacepoint_id"),
         make_column<float>("position", 3),
-        make_column<int>("hit_id", 3)
+        make_column<int>("hit_id", ServiceHandle<geo::Geometry>()->Nviews())
     ));
   }
 
@@ -478,9 +828,9 @@ void HDF5Maker::beginSubRun(art::SubRun const& sr) {
       make_scalar_column<float>("integral"),
       make_scalar_column<float>("rms"),
       make_scalar_column<int>("tpc"),
-      make_scalar_column<int>("global_plane"),
-      make_scalar_column<float>("global_wire"),
-      make_scalar_column<float>("global_time"),
+      // make_scalar_column<int>("global_plane"),
+      // make_scalar_column<float>("global_wire"),
+      // make_scalar_column<float>("global_time"),
       make_scalar_column<int>("local_plane"),
       make_scalar_column<float>("local_wire"),
       make_scalar_column<float>("local_time")
@@ -497,6 +847,10 @@ void HDF5Maker::beginSubRun(art::SubRun const& sr) {
       make_column<float>("end_position", 3),
       make_column<float>("start_position_corr", 3),
       make_column<float>("end_position_corr", 3),
+      make_column<int>("start_wire_pos", ServiceHandle<geo::Geometry>()->Nviews()),
+      make_column<int>("end_wire_pos", ServiceHandle<geo::Geometry>()->Nviews()),
+      make_scalar_column<float>("start_wire_time"),
+      make_scalar_column<float>("end_wire_time"),
       make_scalar_column<string>("start_process"),
       make_scalar_column<string>("end_process")
   ));
@@ -514,12 +868,71 @@ void HDF5Maker::beginSubRun(art::SubRun const& sr) {
     make_ntuple({fFile, "wire_table", 1000},
       make_column<int>("event_id", 3),
       make_scalar_column<int>("tpc"),
-      make_scalar_column<int>("global_plane"),
-      make_scalar_column<float>("global_wire"),
+      // make_scalar_column<int>("global_plane"),
+      // make_scalar_column<float>("global_wire"),
       make_scalar_column<int>("local_plane"),
       make_scalar_column<float>("local_wire"),
       make_column<float>("adc", ServiceHandle<DetectorPropertiesService>()->DataForJob().ReadOutWindowSize())
   ));
+
+  fOpHitNtuple = new hep_hpc::hdf5::Ntuple(
+    make_ntuple({fFile, "ophit_table", 1000},
+      make_column<int>("event_id", 3),
+      make_scalar_column<int>("hit_id"),
+      make_scalar_column<int>("hit_channel"),
+      make_column<int>("wire_pos", ServiceHandle<geo::Geometry>()->Nviews()),
+      make_scalar_column<float>("peaktime"),
+      make_scalar_column<float>("width"),
+      make_scalar_column<float>("area"),
+      make_scalar_column<float>("amplitude"),
+      make_scalar_column<float>("pe")
+  ));
+
+  fOpFlashNtuple = new hep_hpc::hdf5::Ntuple(
+    make_ntuple({fFile, "opflash_table", 1000},
+      make_column<int>("event_id", 3),
+      make_scalar_column<int>("flash_id"),
+      make_column<int>("wire_pos", ServiceHandle<geo::Geometry>()->Nviews()),
+      make_scalar_column<float>("time"),
+      make_scalar_column<float>("time_width"),
+      make_scalar_column<float>("y_center"),
+      make_scalar_column<float>("y_width"),
+      make_scalar_column<float>("z_center"),
+      make_scalar_column<float>("z_width"),
+      make_column<float>("pe", ServiceHandle<geo::Geometry>()->NOpDets()),
+      make_scalar_column<float>("totalpe")
+  ));
+
+  fPandoraPrimaryNtuple = new hep_hpc::hdf5::Ntuple(
+    make_ntuple({fFile, "pandoraPrimary_table", 1000},
+      make_column<int>("event_id", 3),
+      make_scalar_column<int>("slice_id"),
+      make_scalar_column<int>("pdg"),
+      make_scalar_column<float>("nu_score"),
+      make_column<float>("vtx", 3),
+      make_column<int>("vtx_wire_pos", ServiceHandle<geo::Geometry>()->Nviews()),
+      make_scalar_column<float>("vtx_wire_time")
+  ));
+
+  fPandoraPfpNtuple = new hep_hpc::hdf5::Ntuple(
+    make_ntuple({fFile, "pandoraPfp_table", 1000},
+      make_column<int>("event_id", 3),
+      make_scalar_column<int>("pfp_id"),
+      make_scalar_column<int>("pdg"),
+      make_scalar_column<float>("tkrshr_score"),
+      make_column<float>("vtx", 3),
+      make_column<int>("vtx_wire_pos", ServiceHandle<geo::Geometry>()->Nviews()),
+      make_scalar_column<float>("vtx_wire_time")
+  ));
+
+  fPandoraHitNtuple = new hep_hpc::hdf5::Ntuple(
+    make_ntuple({fFile, "pandoraHit_table", 1000},
+      make_column<int>("event_id", 3),
+      make_scalar_column<int>("hit_id"),
+      make_scalar_column<int>("slice_id"),
+      make_scalar_column<int>("pfp_id")
+  ));
+
 }
 
 void HDF5Maker::endSubRun(art::SubRun const& sr) {
@@ -530,6 +943,11 @@ void HDF5Maker::endSubRun(art::SubRun const& sr) {
   delete fParticleNtuple;
   delete fEnergyDepNtuple;
   delete fWireNtuple;
+  delete fOpHitNtuple;
+  delete fOpFlashNtuple;
+  delete fPandoraPrimaryNtuple;
+  delete fPandoraPfpNtuple;
+  delete fPandoraHitNtuple;
   fFile.close();
 }
 
@@ -561,6 +979,61 @@ void HDF5Maker::ApplySCEMappingXYZ(float& x, float& y, float& z)
       y += offset.Y();
       z += offset.Z();
     }
+}
+
+void HDF5Maker::AddDaughters(const std::map<unsigned int, unsigned int>& _pfpmap,
+			     const ProxyPfpElem_t &pfp_pxy,
+			     const ProxyPfpColl_t &pfp_pxy_col,
+			     std::vector<ProxyPfpElem_t> &slice_v)
+{
+
+  auto daughters = pfp_pxy->Daughters();
+
+  slice_v.push_back(pfp_pxy);
+
+  // if (fVerbose)
+  //   std::cout << "\t PFP w/ PdgCode " << pfp_pxy->PdgCode() << " has " << daughters.size() << " daughters" << std::endl;
+
+  for (auto const &daughterid : daughters)
+  {
+
+    if (_pfpmap.find(daughterid) == _pfpmap.end())
+    {
+      std::cout << "Did not find DAUGHTERID in map! error" << std::endl;
+      continue;
+    }
+
+    // const art::Ptr<recob::PFParticle> pfp_pxy(pfp_pxy_col, _pfpmap.at(daughterid) );
+    auto pfp_pxy2 = pfp_pxy_col.begin();
+    for (size_t j = 0; j < _pfpmap.at(daughterid); ++j)
+      ++pfp_pxy2;
+    // const T& pfp_pxy2 = (pfp_pxy_col.begin()+_pfpmap.at(daughterid));
+
+    AddDaughters(_pfpmap,*pfp_pxy2, pfp_pxy_col, slice_v);
+
+  } // for all daughters
+
+  return;
+} // AddDaughters
+
+float HDF5Maker::GetMetaData(const ProxyPfpElem_t &pfp_pxy, string metaDataName)
+{
+  const auto &pfParticleMetadataList = pfp_pxy.get<larpandoraobj::PFParticleMetadata>();
+  if (pfParticleMetadataList.size() == 0) return -999.;
+  for (unsigned int j = 0; j < pfParticleMetadataList.size(); ++j)
+    {
+      const art::Ptr<larpandoraobj::PFParticleMetadata> &pfParticleMetadata(pfParticleMetadataList.at(j));
+      auto pfParticlePropertiesMap = pfParticleMetadata->GetPropertiesMap();
+      if (!pfParticlePropertiesMap.empty())
+	{
+	  for (std::map<std::string, float>::const_iterator it = pfParticlePropertiesMap.begin(); it != pfParticlePropertiesMap.end(); ++it)
+	    {
+	      if (it->first == metaDataName)
+		return it->second;
+	    } // for map elements
+	} // if pfp metadata map not empty
+    } // for list
+  return -999.;
 }
 
 DEFINE_ART_MODULE(HDF5Maker)

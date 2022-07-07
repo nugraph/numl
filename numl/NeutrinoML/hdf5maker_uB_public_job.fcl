@@ -21,6 +21,12 @@ services:
   message:      @local::microboone_message_services_prod_debug
 }
 
+services.SpaceCharge.EnableCorrSCE: true
+services.SpaceCharge.EnableSimEfieldSCE: true
+services.SpaceCharge.EnableSimSpatialSCE: true
+#services.SpaceCharge.RepresentationType: "Voxelized_TH3"
+#services.SpaceCharge.CalibrationInputFilename: "SpaceCharge/SCEoffsets_dataDriven_combined_bkwd_Jan18.root"
+
 source:
 {
   module_type: RootInput

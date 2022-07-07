@@ -22,6 +22,7 @@ simple_plugin(HDF5Maker "module"
     cetlib
     cetlib_except
     ${ROOT_BASIC_LIB_LIST}
+    ${ROOT_GENVECTOR}
     nusimdata_SimulationBase
     lardataobj_RecoBase
     larcorealg_Geometry
