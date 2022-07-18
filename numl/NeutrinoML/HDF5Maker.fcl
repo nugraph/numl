@@ -6,6 +6,7 @@ hdf5maker:
   SPLabel:      "sps"
   EventInfo:    "nu"
   WireLabel:    "butcher"
+  PandoraLabel: "pandora"
   OpHitLabel:   "ophitBeam"
   OpFlashLabel: "simpleFlashBeam"
   OutputName:   "NeutrinoML"

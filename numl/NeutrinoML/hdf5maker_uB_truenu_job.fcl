@@ -18,7 +18,7 @@ services:
 	OverrideRealData: true
      }
   }
-  message:      @local::microboone_message_services_prod_debug
+  message: @local::microboone_message_services_prod_debug
 }
 
 services.SpaceCharge.EnableCorrSCE: true
@@ -43,24 +43,29 @@ physics:
 
   producers:
   {
-    #nuslhits: { module_type: "PandoraNuSliceHitsProducer" }
-    #sps: @local::standard_spacepointsolver
+    nuhits: { module_type: "TrueNuHitsProducer" }
+    sps: @local::standard_spacepointsolver
   }
 
- #reco: [nuslhits, sps]
+ reco: [nuhits, sps]
  ana:       [ hdf5maker ]
 
- #trigger_paths:       [ reco ]
+ trigger_paths:       [ reco ]
  end_paths:     [ ana ]  
 }
 
-physics.analyzers.hdf5maker.HitLabel: "gaushit"
-physics.analyzers.hdf5maker.HitTruthLabel: "gaushitTruthMatch"
+physics.producers.sps.HitLabel: "nuhits"
+physics.producers.sps.WireIntersectThreshold: 0.3
+physics.producers.sps.WireIntersectThresholdDriftDir: 0.3
+
+physics.analyzers.hdf5maker.HitLabel: "nuhits"
+physics.analyzers.hdf5maker.HitTruthLabel: "nuhits"
 physics.analyzers.hdf5maker.UseMap: true
-physics.analyzers.hdf5maker.SPLabel: ""
-#physics.analyzers.hdf5maker.WireLabel: ""
+physics.analyzers.hdf5maker.WireLabel: ""
+physics.analyzers.hdf5maker.PandoraLabel: ""
 physics.analyzers.hdf5maker.XOffset: 0.6
 physics.analyzers.hdf5maker.FilesBySubrun: false
+physics.analyzers.hdf5maker.OutputName: "NeutrinoML_TN"
 
 #services.message.destinations.LogStandardOut.threshold: "INFO"
 services.message.destinations.LogDebugFile.threshold: "ERROR"

@@ -18,7 +18,14 @@ services:
 	OverrideRealData: true
      }
   }
+  message: @local::microboone_message_services_prod_debug
 }
+
+services.SpaceCharge.EnableCorrSCE: true
+services.SpaceCharge.EnableSimEfieldSCE: true
+services.SpaceCharge.EnableSimSpatialSCE: true
+services.SpaceCharge.RepresentationType: "Voxelized_TH3"
+services.SpaceCharge.CalibrationInputFilename: "SpaceCharge/SCEoffsets_dataDriven_combined_bkwd_Jan18.root"
 
 source:
 {
@@ -54,5 +61,11 @@ physics.producers.sps.WireIntersectThresholdDriftDir: 0.3
 physics.analyzers.hdf5maker.HitLabel: "nuslhits"
 physics.analyzers.hdf5maker.HitTruthLabel: "nuslhits"
 physics.analyzers.hdf5maker.UseMap: true
+physics.analyzers.hdf5maker.WireLabel: ""
+physics.analyzers.hdf5maker.PandoraLabel: ""
+physics.analyzers.hdf5maker.XOffset: 0.6
+physics.analyzers.hdf5maker.FilesBySubrun: false
 
 #services.message.destinations.LogStandardOut.threshold: "INFO"
+services.message.destinations.LogDebugFile.threshold: "ERROR"
+services.message.debugModules: []
