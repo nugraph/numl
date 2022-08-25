@@ -9,6 +9,7 @@ hdf5maker:
   PandoraLabel: "pandora"
   OpHitLabel:   "ophitBeam"
   OpFlashLabel: "simpleFlashBeam"
+  T0Label:      "flashmatch"
   OutputName:   "NeutrinoML"
   XOffset:      0
 }

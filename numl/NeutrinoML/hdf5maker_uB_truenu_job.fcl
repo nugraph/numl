@@ -21,6 +21,7 @@ services:
   message: @local::microboone_message_services_prod_debug
 }
 
+services.DetectorClocksService.TrigModuleName: "daq"
 services.SpaceCharge.EnableCorrSCE: true
 services.SpaceCharge.EnableSimEfieldSCE: true
 services.SpaceCharge.EnableSimSpatialSCE: true

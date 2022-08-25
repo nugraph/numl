@@ -1,4 +1,4 @@
-#include "reco_uboone_mcc9_8.fcl"
+#include "reco_uboone_data_mcc9_8.fcl"
 #include "SpacePointSolver.fcl"
 #include "HDF5Maker.fcl"
 
@@ -10,7 +10,7 @@ services:
   TimeTracker:           {}
   MemoryTracker:         {}
   RandomNumberGenerator: {}
-  @table::microboone_reco_mcc8_services
+  @table::microboone_reco_data_services
   ParticleInventoryService: {
      ParticleInventory: {
         EveIdCalculator: "EmEveIdCalculator"
@@ -21,6 +21,7 @@ services:
   message:      @local::microboone_message_services_prod_debug
 }
 
+services.DetectorClocksService.TrigModuleName: "daq"
 services.SpaceCharge.EnableCorrSCE: true
 services.SpaceCharge.EnableSimEfieldSCE: true
 services.SpaceCharge.EnableSimSpatialSCE: true
@@ -61,6 +62,7 @@ physics.analyzers.hdf5maker.SPLabel: ""
 #physics.analyzers.hdf5maker.WireLabel: ""
 physics.analyzers.hdf5maker.XOffset: 0.6
 physics.analyzers.hdf5maker.FilesBySubrun: false
+physics.analyzers.hdf5maker.OutputName: "NeutrinoML_Open_WithWire"
 
 #services.message.destinations.LogStandardOut.threshold: "INFO"
 services.message.destinations.LogDebugFile.threshold: "ERROR"

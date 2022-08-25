@@ -7,13 +7,6 @@
 // from cetlib version v3_11_01.
 ////////////////////////////////////////////////////////////////////////
 
-/*
-1. check x correction and timing (MC, pfp, opdet/flash) => fixed MC, need to understand opdet/flash
-2. check if wire positions are correct => correct based on evds (there is a 2400 ticks shift wrt evd though)
-3. check truth info is filled and correct =? looks good
-4. how are the MC starting positions set for showers? => seems good! (we can use end position for photons from pi0s and start position for primary electrons)
- */
-
 #include "art/Framework/Core/EDAnalyzer.h"
 #include "art/Framework/Core/ModuleMacros.h"
 #include "art/Framework/Principal/Event.h"
@@ -37,6 +30,7 @@
 #include "lardataobj/RecoBase/Wire.h"
 #include "lardataobj/RecoBase/OpHit.h"
 #include "lardataobj/RecoBase/OpFlash.h"
+#include "lardataobj/AnalysisBase/T0.h"
 
 #include "larsim/MCCheater/BackTrackerService.h"
 #include "larsim/MCCheater/ParticleInventoryService.h"
@@ -109,6 +103,7 @@ private:
   string fPandoraLabel;
   string fOpHitLabel;
   string fOpFlashLabel;
+  string fT0Label;
 
   bool fUseMap;
   string fEventInfo;
@@ -148,7 +143,7 @@ private:
                         // Column<float, 1>,  // global wire
                         // Column<float, 1>,  // global time
                         Column<int, 1>,    // raw plane
-                        Column<float, 1>,  // raw wire
+                        Column<int, 1>,    // raw wire
                         Column<float, 1>   // raw time
   >* fHitNtuple; ///< hit ntuple
 
@@ -213,6 +208,7 @@ private:
                         Column<int, 1>,    // slice id
                         Column<int, 1>,    // pdg
                         Column<float, 1>,  // neutrino score
+                        Column<float, 1>,  // flash match score
                         Column<float, 1>,  // primary vertex position (x, y, z)
 			Column<int, 1>,    // primary vertex wire pos
 			Column<float, 1>   // primary vertex wire time
@@ -244,7 +240,8 @@ private:
                 proxy::withAssociated<larpandoraobj::PFParticleMetadata>(std::declval<art::InputTag>()),
                 proxy::withAssociated<recob::Slice>(std::declval<art::InputTag>()),
                 proxy::withAssociated<recob::Cluster>(std::declval<art::InputTag>()),
-                proxy::withAssociated<recob::Vertex>(std::declval<art::InputTag>()) ));
+                proxy::withAssociated<recob::Vertex>(std::declval<art::InputTag>()),
+                proxy::withAssociated<anab::T0>(std::declval<art::InputTag>()) ));
   using ProxyPfpElem_t = ProxyPfpColl_t::element_proxy_t;
 
   // proxy to connect cluster to hit
@@ -271,6 +268,7 @@ HDF5Maker::HDF5Maker(fhicl::ParameterSet const& p)
     fPandoraLabel(   p.get<string>("PandoraLabel")),
     fOpHitLabel(  p.get<string>("OpHitLabel")),
     fOpFlashLabel(  p.get<string>("OpFlashLabel")),
+    fT0Label(   p.get<string>("T0Label")),
     fUseMap(    p.get<bool>("UseMap",false)),
     fEventInfo( p.get<string>("EventInfo")),
     fOutputName(p.get<string>("OutputName")),
@@ -291,7 +289,7 @@ void HDF5Maker::analyze(art::Event const& e)
   }
   art::ServiceHandle<geo::Geometry> geo;
   auto const &detProperties = lar::providerFrom<detinfo::DetectorPropertiesService>();
-  // auto const &detClocks = lar::providerFrom<detinfo::DetectorClocksService>();
+  auto const &detClocks = lar::providerFrom<detinfo::DetectorClocksService>();
 
   int run = e.id().run();
   int subrun = e.id().subRun();
@@ -487,8 +485,7 @@ void HDF5Maker::analyze(art::Event const& e)
   vector< art::Ptr< recob::Slice > > slicelist;
   std::unique_ptr<art::FindManyP<recob::Hit> > assocSliceHit;
   if (fPandoraLabel!="") {
-    if (e.getByLabel(fPandoraLabel, sliceListHandle))
-      art::fill_ptr_vector(slicelist, sliceListHandle);
+    if (e.getByLabel(fPandoraLabel, sliceListHandle))  art::fill_ptr_vector(slicelist, sliceListHandle);
     assocSliceHit = std::unique_ptr<art::FindManyP<recob::Hit> >(new art::FindManyP<recob::Hit>(sliceListHandle, e, fPandoraLabel));
   }
   vector<int> hit_slice_idx(hitlist.size(),-1);
@@ -508,11 +505,13 @@ void HDF5Maker::analyze(art::Event const& e)
   if (fPandoraLabel!="") {
     // grab PFParticles in event
     art::InputTag fPandoraTag(fPandoraLabel);
+    art::InputTag fT0Tag(fT0Label);
     ProxyPfpColl_t const &pfp_pxy_col = proxy::getCollection<std::vector<recob::PFParticle>>(e, fPandoraTag,
 											     proxy::withAssociated<larpandoraobj::PFParticleMetadata>(fPandoraTag),
 											     proxy::withAssociated<recob::Slice>(fPandoraTag),
 											     proxy::withAssociated<recob::Cluster>(fPandoraTag),
-											     proxy::withAssociated<recob::Vertex>(fPandoraTag)
+											     proxy::withAssociated<recob::Vertex>(fPandoraTag),
+											     proxy::withAssociated<anab::T0>(fT0Tag)
 											     );
     ProxyClusColl_t const &clus_proxy = proxy::getCollection<std::vector<recob::Cluster> >(e, fPandoraTag, proxy::withAssociated<recob::Hit>(fPandoraTag));
 
@@ -556,10 +555,16 @@ void HDF5Maker::analyze(art::Event const& e)
 	  // std::cout << "tick=" << detProperties->ConvertXToTicks(nvx[0], 0, 0, 0) << " u=" << nearwires[0] << " v=" << nearwires[1] << " y=" << nearwires[2] << std::endl;
 	}
 
+	float fm = 9999.;
+	auto t0s = pfp_pxy.get<anab::T0>();
+	if (t0s.size()==1) fm = t0s.at(0)->TriggerConfidence();
+	// std::cout << "TO size=" << t0s.size() << " score=" << t0s.at(0)->TriggerConfidence() << " pdg=" << pfp_pxy->PdgCode() << " q=" << slices[0]->Center() << std::endl;
+
 	fPandoraPrimaryNtuple->insert( evtID.data(),
 				       slices[0].key(),
 				       pfp_pxy->PdgCode(),
 				       GetMetaData(pfp_pxy, "NuScore"),
+				       fm,
 				       nvx,
 				       nearwires.data(),
 				       detProperties->ConvertXToTicks(nvx[0], 0, 0, 0)
@@ -761,8 +766,8 @@ void HDF5Maker::analyze(art::Event const& e)
     for (auto p : geo->IteratePlaneIDs()) nearwires.push_back(NearWire(*geo,p,xyz[0],xyz[1],xyz[2]));
     // Fill ophit table
     fOpHitNtuple->insert(evtID.data(),ophit.key(),
-			 nearwires.data(),
-			 ophit->OpChannel(),ophit->PeakTime(),ophit->Width(),
+			 ophit->OpChannel(),nearwires.data(),
+			 ophit->PeakTime(),ophit->Width(),
 			 ophit->Area(),ophit->Amplitude(),ophit->PE()
     );
     LogInfo("HDF5Maker") << "Filling ophit table"
@@ -798,7 +803,7 @@ void HDF5Maker::analyze(art::Event const& e)
     fOpFlashNtuple->insert(evtID.data(),
 			   opflash.key(),
 			   nearwires.data(),
-			   opflash->Time(),opflash->TimeWidth(),
+			   detClocks->Time2Tick(opflash->AbsTime()),opflash->TimeWidth()/detClocks->TPCClock().TickPeriod(),
 			   opflash->YCenter(),opflash->YWidth(),opflash->ZCenter(),opflash->ZWidth(),
 			   pes.data(),opflash->TotalPE()
     );
@@ -820,6 +825,8 @@ void HDF5Maker::analyze(art::Event const& e)
     // 	      << " TriggerTime=" << detClocks->TriggerTime() << " TPCTime=" << detClocks->TPCTime()
     // 	      << " G4RefTime=" << -detClocks->G4ToElecTime(0)
     // 	      << " Time2Tick=" << detClocks->Time2Tick(opflash->Time())
+    // 	      << " Time2Tick(abs)=" << detClocks->Time2Tick(opflash->AbsTime())
+    // 	      << " TickPeriod=" << detClocks->TPCClock().TickPeriod()
     // 	      << std::endl;
   }
 
@@ -888,7 +895,7 @@ void HDF5Maker::createFile(const art::SubRun* sr) {
         // make_scalar_column<float>("global_wire"),
         // make_scalar_column<float>("global_time"),
         make_scalar_column<int>("local_plane"),
-        make_scalar_column<float>("local_wire"),
+        make_scalar_column<int>("local_wire"),
         make_scalar_column<float>("local_time")
     ));
   }
@@ -973,6 +980,7 @@ void HDF5Maker::createFile(const art::SubRun* sr) {
         make_scalar_column<int>("slice_id"),
         make_scalar_column<int>("pdg"),
         make_scalar_column<float>("nu_score"),
+        make_scalar_column<float>("flashmatch_score"),
         make_column<float>("vtx", 3),
         make_column<int>("vtx_wire_pos", ServiceHandle<geo::Geometry>()->Nviews()),
         make_scalar_column<float>("vtx_wire_time")
