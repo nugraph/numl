@@ -1,4 +1,4 @@
-#include "reco_uboone_mcc9_8.fcl"
+#include "reco_uboone_data_mcc9_8.fcl"
 #include "SpacePointSolver.fcl"
 #include "HDF5Maker.fcl"
 
@@ -10,7 +10,7 @@ services:
   TimeTracker:           {}
   MemoryTracker:         {}
   RandomNumberGenerator: {}
-  @table::microboone_reco_mcc8_services
+  @table::microboone_reco_data_services
   ParticleInventoryService: {
      ParticleInventory: {
         EveIdCalculator: "EmEveIdCalculator"
@@ -21,6 +21,7 @@ services:
   message: @local::microboone_message_services_prod_debug
 }
 
+services.DetectorClocksService.TrigModuleName: "triggersim"
 services.DetectorClocksService.TrigModuleName: "daq"
 services.SpaceCharge.EnableCorrSCE: true
 services.SpaceCharge.EnableSimEfieldSCE: true

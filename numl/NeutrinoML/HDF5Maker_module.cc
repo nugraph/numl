@@ -119,6 +119,7 @@ private:
 
   hep_hpc::hdf5::Ntuple<Column<int, 1>,    // event id (run, subrun, event)
                         Column<int, 1>,    // is cc
+                        Column<int, 1>,    // nu type (pdg code)
                         Column<float, 1>,  // nu energy
                         Column<float, 1>,  // lep energy
                         Column<float, 1>,  // nu dir (x, y, z)
@@ -144,7 +145,10 @@ private:
                         // Column<float, 1>,  // global time
                         Column<int, 1>,    // raw plane
                         Column<int, 1>,    // raw wire
-                        Column<float, 1>   // raw time
+                        Column<float, 1>  // TPC time tick (wire time)
+                        // Column<float, 1>,  // goodness of fit
+                        // Column<int, 1>,    // degrees of freedom
+                        // Column<int, 1>     // multiplicity
   >* fHitNtuple; ///< hit ntuple
 
   hep_hpc::hdf5::Ntuple<Column<int, 1>,    // event id (run, subrun, event)
@@ -188,7 +192,8 @@ private:
 			Column<float, 1>,  // width
 			Column<float, 1>,  // area
 			Column<float, 1>,  // amplitude
-			Column<float, 1>   // pe
+			Column<float, 1>,  // pe
+			Column<int, 1>    // usedInFlash
   >* fOpHitNtuple; ///< PMT hit ntuple
 
   hep_hpc::hdf5::Ntuple<Column<int, 1>,    // event id (run, subrun, event)
@@ -289,7 +294,7 @@ void HDF5Maker::analyze(art::Event const& e)
   }
   art::ServiceHandle<geo::Geometry> geo;
   auto const &detProperties = lar::providerFrom<detinfo::DetectorPropertiesService>();
-  auto const &detClocks = lar::providerFrom<detinfo::DetectorClocksService>();
+  // auto const &detClocks = lar::providerFrom<detinfo::DetectorClocksService>();
 
   int run = e.id().run();
   int subrun = e.id().subRun();
@@ -314,7 +319,7 @@ void HDF5Maker::analyze(art::Event const& e)
     }
     simb::MCNeutrino nutruth = truthHandle->at(0).GetNeutrino();
 
-    array<float, 3> nuMomentum {
+    array<float, 3> nuDirection {
       (float)nutruth.Nu().Momentum().Vect().Unit().X(),
       (float)nutruth.Nu().Momentum().Vect().Unit().Y(),
       (float)nutruth.Nu().Momentum().Vect().Unit().Z()
@@ -332,6 +337,20 @@ void HDF5Maker::analyze(art::Event const& e)
     // double g4Ticks = detClocks->TPCG4Time2Tick(nuT) + detProperties->GetXTicksOffset(0, 0, 0) - detProperties->TriggerOffset();
     // std::cout << "TPCG4Time2Tick=" << detClocks->TPCG4Time2Tick(nuT) << " GetXTicksOffset=" << detProperties->GetXTicksOffset(0, 0, 0) << " TriggerOffset=" << detProperties->TriggerOffset() << " TriggerOffsetTPC=" << detClocks->TriggerOffsetTPC() << std::endl;
     // std::cout << "nuT=" << nuT << " x->t =" << detProperties->ConvertXToTicks(nuVtxCorr[0], 0, 0, 0) << " g4Ticks=" << g4Ticks << " Offset=" << detProperties->ConvertXToTicks(fXOffset,0,0,0) << std::endl;
+    // std::cout << "TriggerTime=" << detClocks->TriggerTime() << std::endl;
+    // std::cout << "BeamGateTime=" << detClocks->BeamGateTime() << std::endl;
+    // std::cout << "OpticalG4Time2TDC=" << detClocks->OpticalG4Time2TDC(nuT) << std::endl;
+    // float _time2cm = detProperties->SamplingRate() / 1000.0 * detProperties->DriftVelocity( detProperties->Efield(), detProperties->Temperature() );
+    // std::cout << "time2cm=" << _time2cm << " trigOffset=" << detProperties->TriggerOffset() << std::endl;
+    // double xyzStart[3] = {0,0,0};
+    // double xyzEnd[3] = {0,0,0};
+    // for (int ip=0;ip<3;ip++) {
+    //   for (unsigned int iw=0;iw<geo->Nwires(ip,0,0);iw++) {
+    // 	geo->WireEndPoints(geo::WireID(0,0,ip,iw),xyzStart,xyzEnd);
+    // 	std::cout << "plane "<<ip<<" wire "<<iw<<" start = " << xyzStart[0] << " " << xyzStart[1] << " " << xyzStart[2] << " end = " << xyzEnd[0] << " " << xyzEnd[1] << " " << xyzEnd[2] << std::endl;
+    //   }
+    //   std::cout << std::endl;
+    // }
 
     vector<int> nearwires;
     for (auto p : geo->IteratePlaneIDs()) nearwires.push_back(NearWire(*geo,p,nuVtxCorr[0],nuVtxCorr[1],nuVtxCorr[2]));
@@ -339,13 +358,14 @@ void HDF5Maker::analyze(art::Event const& e)
 
     fEventNtupleNu->insert( evtID.data(),
       nutruth.CCNC() == simb::kCC,
+      nutruth.Nu().PdgCode(),
       nutruth.Nu().E(),
       nutruth.Lepton().E(),
-      nuMomentum.data(),
+      nuDirection.data(),
       nuVtx.data(),
       nuVtxCorr.data(),
       nearwires.data(),
-      detProperties->ConvertXToTicks(nuVtxCorr[0], 0, 0, 0)
+      nuT//detProperties->ConvertXToTicks(nuVtxCorr[0], 0, 0, 0)
     );
     LogInfo("HDF5Maker") << "Filling event table"
                          << "\nrun " << evtID[0] << ", subrun " << evtID[1]
@@ -353,8 +373,8 @@ void HDF5Maker::analyze(art::Event const& e)
                          << "\nis cc? " << (nutruth.CCNC() == simb::kCC)
                          << ", nu energy " << nutruth.Nu().E()
                          << ", lepton energy " << nutruth.Lepton().E()
-                         << "\nnu momentum x " << nuMomentum[0] << ", y "
-                         << nuMomentum[1] << ", z " << nuMomentum[2];
+                         << "\nnu direction x " << nuDirection[0] << ", y "
+                         << nuDirection[1] << ", z " << nuDirection[2];
   } // if nu event info
 
   // Get spacepoints from the event record
@@ -428,7 +448,8 @@ void HDF5Maker::analyze(art::Event const& e)
     fHitNtuple->insert(evtID.data(),
       hit.key(), hit->Integral(), hit->RMS(), wireid.TPC,
       // plane, wire, time,
-      wireid.Plane, wireid.Wire, hit->PeakTime()
+      wireid.Plane, wireid.Wire, hit->PeakTime()//,
+      // hit->GoodnessOfFit(),hit->DegreesOfFreedom(),hit->Multiplicity()
     );
 
     LogInfo("HDF5Maker") << "Filling hit table"
@@ -569,14 +590,6 @@ void HDF5Maker::analyze(art::Event const& e)
 				       nearwires.data(),
 				       detProperties->ConvertXToTicks(nvx[0], 0, 0, 0)
         );
-	// LogInfo("HDF5Maker") << "Filling event table"
-	//                      << "\nrun " << evtID[0] << ", subrun " << evtID[1]
-	//                      << ", event " << evtID[2]
-	//                      << "\nis cc? " << (nutruth.CCNC() == simb::kCC)
-	//                      << ", nu energy " << nutruth.Nu().E()
-	//                      << ", lepton energy " << nutruth.Lepton().E()
-	//                      << "\nnu momentum x " << nuMomentum[0] << ", y "
-	//                      << nuMomentum[1] << ", z " << nuMomentum[2];
 
 	//  find neutrino candidate
 	auto PDG = fabs(pfp_pxy->PdgCode());
@@ -628,14 +641,6 @@ void HDF5Maker::analyze(art::Event const& e)
 				       nearwires.data(),
 				       detProperties->ConvertXToTicks(pvx[0], 0, 0, 0)
 	    );
-	    // LogInfo("HDF5Maker") << "Filling event table"
-	    //                      << "\nrun " << evtID[0] << ", subrun " << evtID[1]
-	    //                      << ", event " << evtID[2]
-	    //                      << "\nis cc? " << (nutruth.CCNC() == simb::kCC)
-	    //                      << ", nu energy " << nutruth.Nu().E()
-	    //                      << ", lepton energy " << nutruth.Lepton().E()
-	    //                      << "\nnu momentum x " << nuMomentum[0] << ", y "
-	    //                      << nuMomentum[1] << ", z " << nuMomentum[2];
 	  } // for all PFParticles in the slice
       } // for all PFParticles
 
@@ -750,46 +755,13 @@ void HDF5Maker::analyze(art::Event const& e)
                          << ", end process " << p->EndProcess();
   }
 
-  // Get OpHits from the event record
-  art::Handle< vector< OpHit > > opHitListHandle;
-  vector< art::Ptr< OpHit > > ophitlist;
-  if (fOpHitLabel != "") {
-    if (e.getByLabel(fOpHitLabel, opHitListHandle))
-      art::fill_ptr_vector(ophitlist, opHitListHandle);
-  }
-  //std::cout << "ophits size=" << ophitlist.size() << std::endl;
-  // Loop over ophits
-  for (art::Ptr< OpHit > ophit : ophitlist) {
-    vector<int> nearwires;
-    double xyz[3] = {0.,0.,0.};
-    geo->OpDetGeoFromOpChannel(ophit->OpChannel()).GetCenter(xyz);
-    for (auto p : geo->IteratePlaneIDs()) nearwires.push_back(NearWire(*geo,p,xyz[0],xyz[1],xyz[2]));
-    // Fill ophit table
-    fOpHitNtuple->insert(evtID.data(),ophit.key(),
-			 ophit->OpChannel(),nearwires.data(),
-			 ophit->PeakTime(),ophit->Width(),
-			 ophit->Area(),ophit->Amplitude(),ophit->PE()
-    );
-    LogInfo("HDF5Maker") << "Filling ophit table"
-			 << "\nrun " << evtID[0] << ", subrun " << evtID[1]
-			 << ", event " << evtID[2]
-			 << "\nhit id " << ophit.key() << ", channel "
-			 << ophit->OpChannel() << ", PeakTime " << ophit->PeakTime()
-			 << ", Width " << ophit->Width()
-			 << "\narea " << ophit->Area() << ", amplitude "
-			 << ophit->Amplitude() << ", PE " << ophit->PE();
-    // std::cout << std::endl;
-    // std::cout << "det center " << xyz[0] << " " << xyz[1] << " " << xyz[2] << std::endl;
-    // std::cout << "nearest wires " << geo->NearestWire(xyz,0) << " " << geo->NearestWire(xyz,1) << " " << geo->NearestWire(xyz,2) << std::endl;
-    // for (auto p : geo->IteratePlaneIDs()) std::cout << "planeid " <<  p << " near wire " << geo->NearestWire(xyz,p) << std::endl;
-  }
-
   // Get OpFlashs from the event record
   art::Handle< vector< OpFlash > > opFlashListHandle;
+  std::unique_ptr<art::FindManyP<recob::OpHit> > assocFlashHit;
   vector< art::Ptr< OpFlash > > opflashlist;
   if (fOpFlashLabel != "") {
-    if (e.getByLabel(fOpFlashLabel, opFlashListHandle))
-      art::fill_ptr_vector(opflashlist, opFlashListHandle);
+    if (e.getByLabel(fOpFlashLabel, opFlashListHandle)) art::fill_ptr_vector(opflashlist, opFlashListHandle);
+    assocFlashHit = std::unique_ptr<art::FindManyP<recob::OpHit> >(new art::FindManyP<recob::OpHit>(opFlashListHandle, e, fOpFlashLabel));
   }
   // Loop over opflashs
   //std::cout << "opflashs size=" << opflashlist.size() << std::endl;
@@ -803,13 +775,14 @@ void HDF5Maker::analyze(art::Event const& e)
     fOpFlashNtuple->insert(evtID.data(),
 			   opflash.key(),
 			   nearwires.data(),
-			   detClocks->Time2Tick(opflash->AbsTime()),opflash->TimeWidth()/detClocks->TPCClock().TickPeriod(),
+			   // detClocks->Time2Tick(opflash->AbsTime()),opflash->TimeWidth()/detClocks->TPCClock().TickPeriod(),
+			   opflash->Time(),opflash->TimeWidth(),
 			   opflash->YCenter(),opflash->YWidth(),opflash->ZCenter(),opflash->ZWidth(),
 			   pes.data(),opflash->TotalPE()
     );
     //std::cout << "PE vec size=" << opflash->PEs().size() << std::endl;
     LogInfo("HDF5Maker") << "Filling opflash table"
-      // std::cout << "\nFilling opflash table"
+    // std::cout <<  "\nFilling opflash table"
 			 << "\nrun " << evtID[0] << ", subrun " << evtID[1]
 			 << ", event " << evtID[2]
 			 << "\nflash id " << opflash.key() << ", Time " << opflash->Time()
@@ -828,6 +801,53 @@ void HDF5Maker::analyze(art::Event const& e)
     // 	      << " Time2Tick(abs)=" << detClocks->Time2Tick(opflash->AbsTime())
     // 	      << " TickPeriod=" << detClocks->TPCClock().TickPeriod()
     // 	      << std::endl;
+  }
+
+  // Get OpHits from the event record
+  art::Handle< vector< OpHit > > opHitListHandle;
+  vector< art::Ptr< OpHit > > ophitlist;
+  if (fOpHitLabel != "") {
+    if (e.getByLabel(fOpHitLabel, opHitListHandle))
+      art::fill_ptr_vector(ophitlist, opHitListHandle);
+  }
+  //std::cout << "ophits size=" << ophitlist.size() << std::endl;
+  // Loop over ophits
+  for (art::Ptr< OpHit > ophit : ophitlist) {
+    vector<int> nearwires;
+    double xyz[3] = {0.,0.,0.};
+    geo->OpDetGeoFromOpChannel(ophit->OpChannel()).GetCenter(xyz);
+    for (auto p : geo->IteratePlaneIDs()) nearwires.push_back(NearWire(*geo,p,xyz[0],xyz[1],xyz[2]));
+    //check if it's in the highest PE flash
+    float maxpe = -1;
+    bool isInFlash = false;
+    for (art::Ptr< OpFlash > opflash : opflashlist) {
+      if (opflash->TotalPE() > maxpe) { 
+	// std::cout << "Assoc flash ophits = " << assocFlashHit->at(opflash.key()).size() << std::endl;
+	auto ophv = assocFlashHit->at(opflash.key());
+	isInFlash = (std::find(ophv.begin(),ophv.end(),ophit)!=ophv.end());
+      }
+    }
+    // Fill ophit table
+    fOpHitNtuple->insert(evtID.data(),ophit.key(),
+			 ophit->OpChannel(),nearwires.data(),
+			 ophit->PeakTime(),ophit->Width(),
+			 ophit->Area(),ophit->Amplitude(),ophit->PE(),
+			 isInFlash
+    );
+    // std::cout << "Filling ophit table"
+    LogInfo("HDF5Maker") << "\nFilling ophit table"
+			 << "\nrun " << evtID[0] << ", subrun " << evtID[1]
+			 << ", event " << evtID[2]
+			 << "\nhit id " << ophit.key() << ", channel "
+			 << ophit->OpChannel() << ", PeakTime " << ophit->PeakTime()
+			 << ", Width " << ophit->Width()
+			 << "\narea " << ophit->Area() << ", amplitude "
+			 << ophit->Amplitude() << ", PE " << ophit->PE();
+    // std::cout << std::endl;
+    // std::cout << "isInFlash=" << isInFlash << std::endl;
+    // std::cout << "det center " << xyz[0] << " " << xyz[1] << " " << xyz[2] << std::endl;
+    // std::cout << "nearest wires " << geo->NearestWire(xyz,0) << " " << geo->NearestWire(xyz,1) << " " << geo->NearestWire(xyz,2) << std::endl;
+    // for (auto p : geo->IteratePlaneIDs()) std::cout << "planeid " <<  p << " near wire " << geo->NearestWire(xyz,p) << std::endl;
   }
 
 } // function HDF5Maker::analyze
@@ -864,6 +884,7 @@ void HDF5Maker::createFile(const art::SubRun* sr) {
       make_ntuple({fFile, "event_table", 1000},
         make_column<int>("event_id", 3),
         make_scalar_column<int>("is_cc"),
+        make_scalar_column<int>("nu_pdg"),
         make_scalar_column<float>("nu_energy"),
         make_scalar_column<float>("lep_energy"),
         make_column<float>("nu_dir", 3),
@@ -896,7 +917,10 @@ void HDF5Maker::createFile(const art::SubRun* sr) {
         // make_scalar_column<float>("global_time"),
         make_scalar_column<int>("local_plane"),
         make_scalar_column<int>("local_wire"),
-        make_scalar_column<float>("local_time")
+        make_scalar_column<float>("local_time")//,
+        // make_scalar_column<float>("gof"),
+        // make_scalar_column<int>("ndof"),
+        // make_scalar_column<int>("multiplicity")
     ));
   }
 
@@ -904,7 +928,7 @@ void HDF5Maker::createFile(const art::SubRun* sr) {
     make_ntuple({fFile, "particle_table", 1000},
       make_column<int>("event_id", 3),
       make_scalar_column<int>("g4_id"),
-      make_scalar_column<int>("type"),
+      make_scalar_column<int>("g4_pdg"),
       make_scalar_column<int>("parent_id"),
       make_scalar_column<float>("momentum"),
       make_column<float>("start_position", 3),
@@ -952,7 +976,8 @@ void HDF5Maker::createFile(const art::SubRun* sr) {
         make_scalar_column<float>("width"),
         make_scalar_column<float>("area"),
         make_scalar_column<float>("amplitude"),
-        make_scalar_column<float>("pe")
+        make_scalar_column<float>("pe"),
+        make_scalar_column<int>("usedInFlash")
     ));
   }
 
@@ -978,7 +1003,7 @@ void HDF5Maker::createFile(const art::SubRun* sr) {
       make_ntuple({fFile, "pandoraPrimary_table", 1000},
         make_column<int>("event_id", 3),
         make_scalar_column<int>("slice_id"),
-        make_scalar_column<int>("pdg"),
+        make_scalar_column<int>("slice_pdg"),
         make_scalar_column<float>("nu_score"),
         make_scalar_column<float>("flashmatch_score"),
         make_column<float>("vtx", 3),
@@ -990,8 +1015,8 @@ void HDF5Maker::createFile(const art::SubRun* sr) {
       make_ntuple({fFile, "pandoraPfp_table", 1000},
         make_column<int>("event_id", 3),
         make_scalar_column<int>("pfp_id"),
-        make_scalar_column<int>("pdg"),
-        make_scalar_column<float>("tkrshr_score"),
+        make_scalar_column<int>("pfp_pdg"),
+        make_scalar_column<float>("trkshr_score"),
         make_column<float>("vtx", 3),
         make_column<int>("vtx_wire_pos", ServiceHandle<geo::Geometry>()->Nviews()),
         make_scalar_column<float>("vtx_wire_time")
