@@ -721,7 +721,7 @@ void HDF5Maker::analyze(art::Event const& e)
     vector<int> nearwires_end;
     for (auto ip : geo->IteratePlaneIDs()) nearwires_end.push_back(NearWire(*geo,ip,particleEndCorr[0],particleEndCorr[1],particleEndCorr[2]));
 
-    int cat=-1,inst=-1;
+    int cat=ParticleCategory::OtherNu,inst=-1;
     int ndelta = 0;
     for (size_t ibt=0;ibt<btparts_v.size();ibt++) {
       if (btparts_v[ibt].category==ParticleCategory::Delta) ndelta++;
@@ -732,7 +732,7 @@ void HDF5Maker::analyze(art::Event const& e)
     }
 
     ndelta = 0;
-    if (cat<0 && inst<0 && std::abs(p->PdgCode())==11 && (p->Process()=="muIoni" || p->Process()=="hIoni")) {
+    if (cat==ParticleCategory::OtherNu && inst==-1 && std::abs(p->PdgCode())==11 && (p->Process()=="muIoni" || p->Process()=="hIoni")) {
       for (size_t ibt=0;ibt<btparts_v.size();ibt++) {
 	if (btparts_v[ibt].category==ParticleCategory::Delta) ndelta++;
 	if (int(btparts_v[ibt].tids[0]) != p->Mother()) continue;
