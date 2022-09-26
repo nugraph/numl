@@ -32,6 +32,7 @@ simple_plugin(HDF5Maker "module"
     ${HEP_HPC_HDF5_LIB}
     ${HDF5_LIB}
     nutools_ParticleNavigation
+    lardataobj_MCBase
 )
 
 simple_plugin(PandoraNuSliceHitsProducer "module"

@@ -43,6 +43,9 @@
 
 #include "lardataobj/AnalysisBase/BackTrackerMatchingData.h"
 
+#include "lardataobj/MCBase/MCShower.h"
+#include "lardataobj/MCBase/MCTrack.h"
+
 #include "hep_hpc/hdf5/make_ntuple.hpp"
 
 using std::array;
@@ -140,21 +143,17 @@ private:
                         Column<float, 1>,  // hit integral
                         Column<float, 1>,  // hit rms
                         Column<int, 1>,    // tpc id
-                        // Column<int, 1>,    // global plane
-                        // Column<float, 1>,  // global wire
-                        // Column<float, 1>,  // global time
                         Column<int, 1>,    // raw plane
                         Column<int, 1>,    // raw wire
                         Column<float, 1>  // TPC time tick (wire time)
-                        // Column<float, 1>,  // goodness of fit
-                        // Column<int, 1>,    // degrees of freedom
-                        // Column<int, 1>     // multiplicity
   >* fHitNtuple; ///< hit ntuple
 
   hep_hpc::hdf5::Ntuple<Column<int, 1>,    // event id (run, subrun, event)
                         Column<int, 1>,    // g4 id
                         Column<int, 1>,    // particle type
                         Column<int, 1>,    // parent g4 id
+                        Column<int, 1>,    // category
+                        Column<int, 1>,    // instance
                         Column<float, 1>,  // momentum
                         Column<float, 1>,  // start position (x, y, z)
                         Column<float, 1>,  // end position (x, y, z)
@@ -177,8 +176,6 @@ private:
 
   hep_hpc::hdf5::Ntuple<Column<int, 1>,    // event id (run, subrun, event)
                         Column<int, 1>,    // tpc id
-                        // Column<int, 1>,    // global plane
-                        // Column<float, 1>,  // global wire
                         Column<int, 1>,    // raw plane
                         Column<float, 1>,  // raw wire
                         Column<float, 1>   // ADC
@@ -193,7 +190,7 @@ private:
 			Column<float, 1>,  // area
 			Column<float, 1>,  // amplitude
 			Column<float, 1>,  // pe
-			Column<int, 1>    // usedInFlash
+			Column<int, 1>     // usedInFlash
   >* fOpHitNtuple; ///< PMT hit ntuple
 
   hep_hpc::hdf5::Ntuple<Column<int, 1>,    // event id (run, subrun, event)
@@ -205,9 +202,15 @@ private:
 			Column<float, 1>,  // Y width
 			Column<float, 1>,  // Z center
 			Column<float, 1>,  // Z width
-			Column<float, 1>,  // pe in each PMT
 			Column<float, 1>   // totalpe
   >* fOpFlashNtuple; ///< Flash ntuple
+
+  hep_hpc::hdf5::Ntuple<Column<int, 1>,    // event id (run, subrun, event)
+                        Column<int, 1>,    // sumpe id
+                        Column<int, 1>,    // flash id
+                        Column<int, 1>,    // PMT channel
+  			Column<float, 1>   // pe
+  >* fOpFlashSumPENtuple; ///< Flash SumPE ntuple
 
   hep_hpc::hdf5::Ntuple<Column<int, 1>,    // event id (run, subrun, event)
                         Column<int, 1>,    // slice id
@@ -234,12 +237,6 @@ private:
                         Column<int, 1>     // pfp id
   >* fPandoraHitNtuple; ///< Pandora hit slice and cluster ntuple
 
-
-  // slice hits
-  // neutrino vertex
-  // pandora track hits
-  // pandora shower hits
-
   using ProxyPfpColl_t = decltype(proxy::getCollection<std::vector<recob::PFParticle> >(
                 std::declval<art::Event>(),std::declval<art::InputTag>(),
                 proxy::withAssociated<larpandoraobj::PFParticleMetadata>(std::declval<art::InputTag>()),
@@ -260,6 +257,35 @@ private:
   void AddDaughters(const std::map<unsigned int, unsigned int>& pfpmap, const ProxyPfpElem_t &pfp_pxy, const ProxyPfpColl_t &pfp_pxy_col, std::vector<ProxyPfpElem_t> &slice_v);
   float GetMetaData(const ProxyPfpElem_t &pfp_pxy, string metaDataName);
   int NearWire(const geo::Geometry& geo, const geo::PlaneID &ip, const float x, const float y, const float z);
+
+  struct BtPart {
+  public:
+
+    BtPart(const int pdg_, const int category_, const float px_, const float py_, const float pz_, const float e_,
+	   const std::vector<unsigned int> &tids_, const float start_x_, const float start_y_, const float start_z_, const float start_t_) :
+      pdg(pdg_),category(category_),px(px_),py(py_),pz(pz_),e(e_),
+      tids(tids_), start_x(start_x_), start_y(start_y_), start_z(start_z_), start_t(start_t_)
+      {}
+
+    BtPart(const int pdg_, const int category_, const float px_, const float py_, const float pz_, const float e_,
+	   const unsigned int tid_, const float start_x_, const float start_y_, const float start_z_, const float start_t_) :
+      pdg(pdg_), category(category_), px(px_), py(py_), pz(pz_), e(e_),
+      start_x(start_x_), start_y(start_y_), start_z(start_z_), start_t(start_t_)
+      { tids.push_back(tid_); }
+
+    int pdg;
+    int category;
+    float px, py, pz, e;
+    std::vector<unsigned int> tids;
+    int nhits = 0;
+    float start_x, start_y, start_z, start_t;
+  };
+
+  std::vector<BtPart> initBacktrackingParticleVec(const std::vector<sim::MCShower> &inputMCShower,
+						  const std::vector<sim::MCTrack> &inputMCTrack,
+						  const std::vector<recob::Hit> &inputHits,
+						  const std::unique_ptr<art::FindManyP<simb::MCParticle, anab::BackTrackerHitMatchingData>> &assocMCPart);
+
 };
 
 
@@ -301,6 +327,8 @@ void HDF5Maker::analyze(art::Event const& e)
   int event = e.id().event();
 
   array<int, 3> evtID { run, subrun, event };
+
+  std::cout << "evt: " << run << " " << subrun << " " << event << std::endl; 
 
   // Fill event table
   if (fEventInfo == "none") {
@@ -686,6 +714,21 @@ void HDF5Maker::analyze(art::Event const& e)
      );
   }
 
+
+  const std::vector<sim::MCShower> &inputMCShower = *(e.getValidHandle<std::vector<sim::MCShower> >("mcreco"));
+  const std::vector<sim::MCTrack> &inputMCTrack = *(e.getValidHandle<std::vector<sim::MCTrack> >("mcreco"));
+  // for (auto mcs : inputMCShower) {
+  //   std::cout << "MCS id = " << mcs.TrackID() << " pdg=" << mcs.PdgCode() << " P=" << mcs.Start().Momentum().P()*0.001 << " proc=" << mcs.Process() << " motherPdg=" << mcs.MotherPdgCode() << " mProc=" << mcs.MotherProcess();
+  //   for (auto id : mcs.DaughterTrackID()) std::cout << " did=" << id;
+  //   std::cout << std::endl; 
+  // }
+  // for (auto mcs : inputMCTrack) {
+  //   std::cout << "MCT id = " << mcs.TrackID() << " pdg=" << mcs.PdgCode() << " P=" << mcs.Start().Momentum().P()*0.001 << " proc=" << mcs.Process() << " motherPdg=" << mcs.MotherPdgCode() << " mProc=" << mcs.MotherProcess();
+  //   std::cout << std::endl; 
+  // }
+  std::vector<HDF5Maker::BtPart> btparts_v = initBacktrackingParticleVec(inputMCShower, inputMCTrack, *hitListHandle, hittruth);
+  // std::cout << "btsize=" << btparts_v.size() << std::endl;
+
   ServiceHandle<ParticleInventoryService> pi;
   set<int> allIDs = g4id; // Copy original so we can safely modify it
 
@@ -721,9 +764,32 @@ void HDF5Maker::analyze(art::Event const& e)
     vector<int> nearwires_end;
     for (auto ip : geo->IteratePlaneIDs()) nearwires_end.push_back(NearWire(*geo,ip,particleEndCorr[0],particleEndCorr[1],particleEndCorr[2]));
 
+    int cat=-1,inst=-1;
+    int ncat3 = 0;
+    for (size_t ibt=0;ibt<btparts_v.size();ibt++) {
+      // std::cout << "ibt=" << ibt << " ncat3=" << ncat3 << " btparts_v[ibt].category=" << btparts_v[ibt].category << std::endl;
+      if (btparts_v[ibt].category==3) ncat3++;
+      if (std::find(btparts_v[ibt].tids.begin(),btparts_v[ibt].tids.end(),id)==btparts_v[ibt].tids.end()) continue;
+      cat = btparts_v[ibt].category;
+      if (cat!=3) inst = ibt-ncat3;
+      // std::cout << "found cat=" << cat << " inst=" << inst << std::endl;
+      break;
+    }
+
+    ncat3 = 0;
+    if (cat<0 && inst<0 && std::abs(p->PdgCode())==11 && (p->Process()=="muIoni" || p->Process()=="hIoni")) {
+      for (size_t ibt=0;ibt<btparts_v.size();ibt++) {
+	if (btparts_v[ibt].category==3) ncat3++;
+	if (int(btparts_v[ibt].tids[0]) != p->Mother()) continue;
+	cat = btparts_v[ibt].category;
+	inst = ibt-ncat3;
+	break;
+      }
+    }
+
     //
     fParticleNtuple->insert(evtID.data(),
-      abs(id), p->PdgCode(), p->Mother(), (float)p->P(),
+      abs(id), p->PdgCode(), p->Mother(), cat, inst, (float)p->P(),
       particleStart.data(), particleEnd.data(),
       particleStartCorr.data(), particleEndCorr.data(),
       nearwires_start.data(),nearwires_end.data(),
@@ -763,6 +829,7 @@ void HDF5Maker::analyze(art::Event const& e)
     if (e.getByLabel(fOpFlashLabel, opFlashListHandle)) art::fill_ptr_vector(opflashlist, opFlashListHandle);
     assocFlashHit = std::unique_ptr<art::FindManyP<recob::OpHit> >(new art::FindManyP<recob::OpHit>(opFlashListHandle, e, fOpFlashLabel));
   }
+  vector<vector<int> > flashsumpepmtmap;
   // Loop over opflashs
   //std::cout << "opflashs size=" << opflashlist.size() << std::endl;
   for (art::Ptr< OpFlash > opflash : opflashlist) {
@@ -778,8 +845,18 @@ void HDF5Maker::analyze(art::Event const& e)
 			   // detClocks->Time2Tick(opflash->AbsTime()),opflash->TimeWidth()/detClocks->TPCClock().TickPeriod(),
 			   opflash->Time(),opflash->TimeWidth(),
 			   opflash->YCenter(),opflash->YWidth(),opflash->ZCenter(),opflash->ZWidth(),
-			   pes.data(),opflash->TotalPE()
+			   //pes.data()
+			   opflash->TotalPE()
     );
+    size_t count = 0;
+    vector<int> sumpepmtmap(ServiceHandle<geo::Geometry>()->NOpDets(),-1);
+    for (size_t ipmt=0;ipmt<pes.size();ipmt++) {
+      if (pes[ipmt]<=0.) continue;
+      fOpFlashSumPENtuple->insert(evtID.data(),count,opflash.key(),ipmt,pes[ipmt]);
+      sumpepmtmap[ipmt] = count;
+      count++;
+    }
+    flashsumpepmtmap.push_back(sumpepmtmap);
     //std::cout << "PE vec size=" << opflash->PEs().size() << std::endl;
     LogInfo("HDF5Maker") << "Filling opflash table"
     // std::cout <<  "\nFilling opflash table"
@@ -792,15 +869,6 @@ void HDF5Maker::analyze(art::Event const& e)
 			 << "\nYWidth " << opflash->YWidth()<< " ZWidth " << opflash->ZWidth()
 			 << "\nInBeamFrame " << opflash->InBeamFrame()<< " OnBeamTime " << opflash->OnBeamTime()
 			 << "\nAbsTime " << opflash->AbsTime() << " TimeWidth " << opflash->TimeWidth() << " FastToTotal " << opflash->FastToTotal();
-    //std::cout << std::endl; for (auto pe : opflash->PEs()) {std::cout << pe << " ";} std::cout << std::endl;
-    // for (auto p : geo->IteratePlaneIDs()) std::cout << "planeid " <<  p << " near wire " << geo->NearestWire(xyz,p) << std::endl;
-    // std::cout << "\nTriggerOffset=" << detProperties->TriggerOffset() << " TriggerOffsetTPC=" << detClocks->TriggerOffsetTPC() 
-    // 	      << " TriggerTime=" << detClocks->TriggerTime() << " TPCTime=" << detClocks->TPCTime()
-    // 	      << " G4RefTime=" << -detClocks->G4ToElecTime(0)
-    // 	      << " Time2Tick=" << detClocks->Time2Tick(opflash->Time())
-    // 	      << " Time2Tick(abs)=" << detClocks->Time2Tick(opflash->AbsTime())
-    // 	      << " TickPeriod=" << detClocks->TPCClock().TickPeriod()
-    // 	      << std::endl;
   }
 
   // Get OpHits from the event record
@@ -819,20 +887,26 @@ void HDF5Maker::analyze(art::Event const& e)
     for (auto p : geo->IteratePlaneIDs()) nearwires.push_back(NearWire(*geo,p,xyz[0],xyz[1],xyz[2]));
     //check if it's in the highest PE flash
     float maxpe = -1;
-    bool isInFlash = false;
+    size_t maxkey = 0;
     for (art::Ptr< OpFlash > opflash : opflashlist) {
       if (opflash->TotalPE() > maxpe) { 
 	// std::cout << "Assoc flash ophits = " << assocFlashHit->at(opflash.key()).size() << std::endl;
-	auto ophv = assocFlashHit->at(opflash.key());
-	isInFlash = (std::find(ophv.begin(),ophv.end(),ophit)!=ophv.end());
+	maxkey = opflash.key();
+	maxpe = opflash->TotalPE();
       }
+    }
+    bool isInFlash = false;
+    if (maxpe>0) {
+      auto ophv = assocFlashHit->at(maxkey);
+      isInFlash = (std::find(ophv.begin(),ophv.end(),ophit)!=ophv.end());
     }
     // Fill ophit table
     fOpHitNtuple->insert(evtID.data(),ophit.key(),
 			 ophit->OpChannel(),nearwires.data(),
 			 ophit->PeakTime(),ophit->Width(),
 			 ophit->Area(),ophit->Amplitude(),ophit->PE(),
-			 isInFlash
+			 (isInFlash ? flashsumpepmtmap[maxkey][ophit->OpChannel()] : -1)
+                         //isInFlash
     );
     // std::cout << "Filling ophit table"
     LogInfo("HDF5Maker") << "\nFilling ophit table"
@@ -843,11 +917,6 @@ void HDF5Maker::analyze(art::Event const& e)
 			 << ", Width " << ophit->Width()
 			 << "\narea " << ophit->Area() << ", amplitude "
 			 << ophit->Amplitude() << ", PE " << ophit->PE();
-    // std::cout << std::endl;
-    // std::cout << "isInFlash=" << isInFlash << std::endl;
-    // std::cout << "det center " << xyz[0] << " " << xyz[1] << " " << xyz[2] << std::endl;
-    // std::cout << "nearest wires " << geo->NearestWire(xyz,0) << " " << geo->NearestWire(xyz,1) << " " << geo->NearestWire(xyz,2) << std::endl;
-    // for (auto p : geo->IteratePlaneIDs()) std::cout << "planeid " <<  p << " near wire " << geo->NearestWire(xyz,p) << std::endl;
   }
 
 } // function HDF5Maker::analyze
@@ -930,6 +999,8 @@ void HDF5Maker::createFile(const art::SubRun* sr) {
       make_scalar_column<int>("g4_id"),
       make_scalar_column<int>("g4_pdg"),
       make_scalar_column<int>("parent_id"),
+      make_scalar_column<int>("category"),
+      make_scalar_column<int>("instance"),
       make_scalar_column<float>("momentum"),
       make_column<float>("start_position", 3),
       make_column<float>("end_position", 3),
@@ -977,7 +1048,8 @@ void HDF5Maker::createFile(const art::SubRun* sr) {
         make_scalar_column<float>("area"),
         make_scalar_column<float>("amplitude"),
         make_scalar_column<float>("pe"),
-        make_scalar_column<int>("usedInFlash")
+        // make_scalar_column<int>("usedInFlash")
+        make_scalar_column<int>("sumpe_id")
     ));
   }
 
@@ -993,8 +1065,17 @@ void HDF5Maker::createFile(const art::SubRun* sr) {
         make_scalar_column<float>("y_width"),
         make_scalar_column<float>("z_center"),
         make_scalar_column<float>("z_width"),
-        make_column<float>("pe", ServiceHandle<geo::Geometry>()->NOpDets()),
+	//make_column<float>("pe", ServiceHandle<geo::Geometry>()->NOpDets()),
         make_scalar_column<float>("totalpe")
+    ));
+
+    fOpFlashSumPENtuple = new hep_hpc::hdf5::Ntuple(
+      make_ntuple({fFile, "opflashsumpe_table", 1000},
+        make_column<int>("event_id", 3),
+        make_scalar_column<int>("sumpe_id"),
+        make_scalar_column<int>("flash_id"),
+        make_scalar_column<int>("pmt_channel"),
+        make_scalar_column<float>("sumpe")
     ));
   }
 
@@ -1048,7 +1129,10 @@ void HDF5Maker::closeFile() {
   delete fEnergyDepNtuple;
   if (fWireLabel  != "") delete fWireNtuple;
   if (fOpHitLabel != "") delete fOpHitNtuple;
-  if (fOpFlashLabel != "") delete fOpFlashNtuple;
+  if (fOpFlashLabel != "") {
+    delete fOpFlashNtuple;
+    delete fOpFlashSumPENtuple;
+  }
   if (fPandoraLabel != "") {
     delete fPandoraPrimaryNtuple;
     delete fPandoraPfpNtuple;
@@ -1152,4 +1236,74 @@ int HDF5Maker::NearWire(const geo::Geometry& geo, const geo::PlaneID &ip, const 
   }
   return wireID.Wire;
 }
+
+std::vector<HDF5Maker::BtPart> HDF5Maker::initBacktrackingParticleVec(const std::vector<sim::MCShower> &inputMCShower,
+							   const std::vector<sim::MCTrack> &inputMCTrack,
+							   const std::vector<recob::Hit> &inputHits,
+							   const std::unique_ptr<art::FindManyP<simb::MCParticle, anab::BackTrackerHitMatchingData>> &assocMCPart) {
+
+  std::vector<BtPart> btparts_v;
+  for (auto mcs : inputMCShower)
+  {
+    int category = -1;
+    if (mcs.Process() == "primary" && mcs.PdgCode()==22) category=0;//photon
+    else if (mcs.MotherPdgCode() == 111 && mcs.Process() == "Decay" && mcs.MotherProcess() == "primary") category=0;//photons from pi0
+    else if (mcs.Process() == "primary" && std::abs(mcs.PdgCode())==11) category=1;//electron
+    else if (std::abs(mcs.MotherPdgCode()) == 13 && mcs.Process() == "Decay") category=2;//michel electron
+    else if (std::abs(mcs.MotherPdgCode()) == 13 && mcs.Process() == "muIoni" && mcs.Start().Momentum().P()>10) category=3;//delta
+    else if (std::abs(mcs.MotherPdgCode()) == 211 && mcs.Process() == "hIoni" && mcs.Start().Momentum().P()>10) category=3;//delta
+    else continue;
+
+    sim::MCStep mc_step_shower_start = mcs.DetProfile();
+    btparts_v.push_back(BtPart(mcs.PdgCode(), category, mcs.Start().Momentum().Px() * 0.001, mcs.Start().Momentum().Py() * 0.001,
+			       mcs.Start().Momentum().Pz() * 0.001, mcs.Start().Momentum().E() * 0.001, mcs.DaughterTrackID(),
+			       mc_step_shower_start.X(), mc_step_shower_start.Y(), mc_step_shower_start.Z(), mc_step_shower_start.T()));
+
+  }
+  for (auto mct : inputMCTrack)
+  {
+
+    int category = -1;
+    if (std::abs(mct.PdgCode())==13) category=4;  //muon
+    else if (std::abs(mct.PdgCode())==2212) category=5;//proton
+    else if (std::abs(mct.PdgCode())==211) category=6; //charged pion
+    else if (std::abs(mct.PdgCode())==321) category=7; //charged kaon
+    else continue;
+
+    sim::MCStep mc_step_track_start = mct.Start();
+    btparts_v.push_back(BtPart(mct.PdgCode(), category, mct.Start().Momentum().Px() * 0.001, mct.Start().Momentum().Py() * 0.001,
+			       mct.Start().Momentum().Pz() * 0.001, mct.Start().Momentum().E() * 0.001, mct.TrackID(),
+			       mc_step_track_start.X(), mc_step_track_start.Y(), mc_step_track_start.Z(), mc_step_track_start.T()));
+
+  }
+  // Now let's fill the nhits member using all input hits
+  for (unsigned int ih = 0; ih < inputHits.size(); ih++)
+  {
+    auto assmcp = assocMCPart->at(ih);
+    auto assmdt = assocMCPart->data(ih);
+    for (unsigned int ia = 0; ia < assmcp.size(); ++ia)
+    {
+      auto mcp = assmcp[ia];
+      auto amd = assmdt[ia];
+      if (amd->isMaxIDE != 1) continue;
+
+      for (auto &btp : btparts_v)
+      {
+        if (std::find(btp.tids.begin(), btp.tids.end(), mcp->TrackId()) != btp.tids.end())
+        {
+          btp.nhits++;
+        }
+      }
+    }
+  }
+  std::vector<BtPart> btparts_v_final;
+  for (size_t i=0;i<btparts_v.size();++i) {
+    if (btparts_v[i].nhits>5) {
+      btparts_v_final.push_back(btparts_v[i]);
+      //std::cout << "btpart nhits=" << btparts_v[i].nhits << std::endl;
+    }
+  }
+  return btparts_v_final;
+}
+
 DEFINE_ART_MODULE(HDF5Maker)
