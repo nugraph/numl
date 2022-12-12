@@ -21,11 +21,15 @@ cet_set_compiler_flags(DIAGS CAUTIOUS
 
 cet_report_compiler_flags()
 
+find_ups_product( lardata )
+find_ups_product( lardataalg )
 find_ups_product( lardataobj )
 find_ups_product( larsim )
 find_ups_product( nutools )
 find_ups_product( art )
 find_ups_product( cetbuildtools )
+find_ups_product( hep_hpc )
+find_ups_product( hdf5 )
 
 include(ArtDictionary)
 include(ArtMake)

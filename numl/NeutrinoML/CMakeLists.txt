@@ -1,10 +1,3 @@
-include_directories( $ENV{HEP_HPC_INC} )
-include_directories( $ENV{HDF5_INC} )
-cet_find_library( HEP_HPC_HDF5_LIB NAMES hep_hpc_hdf5 PATHS ENV HEP_HPC_LIB NO_DEFAULT_PATH )
-cet_find_library( HDF5_LIB NAMES hdf5 PATHS ENV HDF5_LIB NO_DEFAULT_PATH )
-
-#art_make(
-#  LIB_LIBRARIES
 simple_plugin(HDF5Maker "module"
     ${ART_FRAMEWORK_PRINCIPAL}
     ${ART_FRAMEWORK_SERVICES_REGISTRY}
@@ -25,8 +18,9 @@ simple_plugin(HDF5Maker "module"
     nusimdata_SimulationBase
     larsim_MCCheater_BackTrackerService_service           
     larsim_MCCheater_ParticleInventoryService_service
-    ${HEP_HPC_HDF5_LIB}
-    ${HDF5_LIB}
+    hep_hpc_hdf5
+    hep_hpc_Utilities
+    ${HDF5_LIBRARIES}
 )
 
 simple_plugin(PandoraNuSliceHitsProducer "module"
