@@ -30,33 +30,6 @@
 
 #include "hep_hpc/hdf5/make_ntuple.hpp"
 
-using std::array;
-using std::endl;
-using std::setfill;
-using std::set;
-using std::setw;
-using std::string;
-using std::vector;
-
-using simb::MCParticle;
-using simb::MCTruth;
-using sim::TrackIDE;
-using recob::Hit;
-using recob::SpacePoint;
-
-using mf::LogInfo;
-
-using art::ServiceHandle;
-using cheat::BackTrackerService;
-using cheat::ParticleInventoryService;
-using detinfo::DetectorClocksService;
-using detinfo::DetectorPropertiesService;
-
-using hep_hpc::hdf5::Column;
-using hep_hpc::hdf5::make_ntuple;
-using hep_hpc::hdf5::make_scalar_column;
-using hep_hpc::hdf5::make_column;
-
 class HDF5Maker : public art::EDAnalyzer {
 public:
   explicit HDF5Maker(fhicl::ParameterSet const& p);
@@ -73,74 +46,74 @@ public:
 
 private:
 
-  string fTruthLabel;
-  string fHitLabel;
-  string fHitTruthLabel;
-  string fSPLabel;
+  std::string fTruthLabel;
+  std::string fHitLabel;
+  std::string fHitTruthLabel;
+  std::string fSPLabel;
 
   bool fUseMap;
-  string fEventInfo;
-  string fOutputName;
+  std::string fEventInfo;
+  std::string fOutputName;
 
   hep_hpc::hdf5::File fFile;  ///< output HDF5 file
 
-  hep_hpc::hdf5::Ntuple<Column<int, 1>     // event id (run, subrun, event)
+  hep_hpc::hdf5::Ntuple<hep_hpc::hdf5::Column<int, 1>     // event id (run, subrun, event)
   >* fEventNtuple; ///< event ntuple
 
-  hep_hpc::hdf5::Ntuple<Column<int, 1>,    // event id (run, subrun, event)
-                        Column<int, 1>,    // is cc
-                        Column<float, 1>,  // nu energy
-                        Column<float, 1>,  // lep energy
-                        Column<float, 1>   // nu dir (x, y, z)
+  hep_hpc::hdf5::Ntuple<hep_hpc::hdf5::Column<int, 1>,    // event id (run, subrun, event)
+                        hep_hpc::hdf5::Column<int, 1>,    // is cc
+                        hep_hpc::hdf5::Column<float, 1>,  // nu energy
+                        hep_hpc::hdf5::Column<float, 1>,  // lep energy
+                        hep_hpc::hdf5::Column<float, 1>   // nu dir (x, y, z)
   >* fEventNtupleNu; ///< event ntuple with neutrino information
 
-  hep_hpc::hdf5::Ntuple<Column<int, 1>,    // event id (run, subrun, event)
-                        Column<int, 1>,    // spacepoint id
-                        Column<float, 1>,  // 3d position (x, y, z)
-                        Column<int, 1>     // 2d hit (u, v, y)
+  hep_hpc::hdf5::Ntuple<hep_hpc::hdf5::Column<int, 1>,    // event id (run, subrun, event)
+                        hep_hpc::hdf5::Column<int, 1>,    // spacepoint id
+                        hep_hpc::hdf5::Column<float, 1>,  // 3d position (x, y, z)
+                        hep_hpc::hdf5::Column<int, 1>     // 2d hit (u, v, y)
   >* fSpacePointNtuple; ///< spacepoint ntuple
 
-  hep_hpc::hdf5::Ntuple<Column<int, 1>,    // event id (run, subrun, event)
-                        Column<int, 1>,    // hit id
-                        Column<float, 1>,  // hit integral
-                        Column<float, 1>,  // hit rms
-                        Column<int, 1>,    // tpc id
-                        Column<int, 1>,    // global plane
-                        Column<float, 1>,  // global wire
-                        Column<float, 1>,  // global time
-                        Column<int, 1>,    // raw plane
-                        Column<float, 1>,  // raw wire
-                        Column<float, 1>   // raw time
+  hep_hpc::hdf5::Ntuple<hep_hpc::hdf5::Column<int, 1>,    // event id (run, subrun, event)
+                        hep_hpc::hdf5::Column<int, 1>,    // hit id
+                        hep_hpc::hdf5::Column<float, 1>,  // hit integral
+                        hep_hpc::hdf5::Column<float, 1>,  // hit rms
+                        hep_hpc::hdf5::Column<int, 1>,    // tpc id
+                        hep_hpc::hdf5::Column<int, 1>,    // global plane
+                        hep_hpc::hdf5::Column<float, 1>,  // global wire
+                        hep_hpc::hdf5::Column<float, 1>,  // global time
+                        hep_hpc::hdf5::Column<int, 1>,    // raw plane
+                        hep_hpc::hdf5::Column<float, 1>,  // raw wire
+                        hep_hpc::hdf5::Column<float, 1>   // raw time
   >* fHitNtuple; ///< hit ntuple
 
-  hep_hpc::hdf5::Ntuple<Column<int, 1>,    // event id (run, subrun, event)
-                        Column<int, 1>,    // g4 id
-                        Column<int, 1>,    // particle type
-                        Column<int, 1>,    // parent g4 id
-                        Column<float, 1>,  // momentum
-                        Column<float, 1>,  // start position (x, y, z)
-                        Column<float, 1>,  // end position (x, y, z)
-                        Column<string, 1>, // start process
-                        Column<string, 1>  // end process
+  hep_hpc::hdf5::Ntuple<hep_hpc::hdf5::Column<int, 1>,    // event id (run, subrun, event)
+                        hep_hpc::hdf5::Column<int, 1>,    // g4 id
+                        hep_hpc::hdf5::Column<int, 1>,    // particle type
+                        hep_hpc::hdf5::Column<int, 1>,    // parent g4 id
+                        hep_hpc::hdf5::Column<float, 1>,  // momentum
+                        hep_hpc::hdf5::Column<float, 1>,  // start position (x, y, z)
+                        hep_hpc::hdf5::Column<float, 1>,  // end position (x, y, z)
+                        hep_hpc::hdf5::Column<std::string, 1>, // start process
+                        hep_hpc::hdf5::Column<std::string, 1>  // end process
   >* fParticleNtuple; ///< particle ntuple
 
-  hep_hpc::hdf5::Ntuple<Column<int, 1>,    // event id (run, subrun, event)
-                        Column<int, 1>,    // hit id
-                        Column<int, 1>,    // g4 id
-                        Column<float, 1>   // deposited energy [ MeV ]
+  hep_hpc::hdf5::Ntuple<hep_hpc::hdf5::Column<int, 1>,    // event id (run, subrun, event)
+                        hep_hpc::hdf5::Column<int, 1>,    // hit id
+                        hep_hpc::hdf5::Column<int, 1>,    // g4 id
+                        hep_hpc::hdf5::Column<float, 1>   // deposited energy [ MeV ]
   >* fEnergyDepNtuple; ///< energy deposition ntuple
 };
 
 
 HDF5Maker::HDF5Maker(fhicl::ParameterSet const& p)
   : EDAnalyzer{p},
-    fTruthLabel(p.get<string>("TruthLabel")),
-    fHitLabel(  p.get<string>("HitLabel")),
-    fHitTruthLabel(  p.get<string>("HitTruthLabel","")),
-    fSPLabel(   p.get<string>("SPLabel")),
+    fTruthLabel(p.get<std::string>("TruthLabel")),
+    fHitLabel(  p.get<std::string>("HitLabel")),
+    fHitTruthLabel(  p.get<std::string>("HitTruthLabel","")),
+    fSPLabel(   p.get<std::string>("SPLabel")),
     fUseMap(    p.get<bool>("UseMap", false)),
-    fEventInfo( p.get<string>("EventInfo")),
-    fOutputName(p.get<string>("OutputName"))
+    fEventInfo( p.get<std::string>("EventInfo")),
+    fOutputName(p.get<std::string>("OutputName"))
 {
   if (fEventInfo != "none" && fEventInfo != "nu")
     throw art::Exception(art::errors::Configuration)
@@ -150,7 +123,7 @@ HDF5Maker::HDF5Maker(fhicl::ParameterSet const& p)
 void HDF5Maker::analyze(art::Event const& e)
 {
   const cheat::BackTrackerService* bt = 0;
-  if (fUseMap==false) {
+  if (!fUseMap) {
     art::ServiceHandle<cheat::BackTrackerService> bt_h;
     bt = bt_h.get();
   }
@@ -159,18 +132,18 @@ void HDF5Maker::analyze(art::Event const& e)
   int subrun = e.id().subRun();
   int event = e.id().event();
 
-  array<int, 3> evtID { run, subrun, event };
+  std::array<int, 3> evtID { run, subrun, event };
 
   // Fill event table
   if (fEventInfo == "none") {
     fEventNtuple->insert( evtID.data() );
-    LogInfo("HDF5Maker") << "Filling event table"
-                         << "\nrun " << evtID[0] << ", subrun " << evtID[1]
-                         << ", event " << evtID[2];
+    mf::LogInfo("HDF5Maker") << "Filling event table"
+                             << "\nrun " << evtID[0] << ", subrun " << evtID[1]
+                             << ", event " << evtID[2];
   }
   if (fEventInfo == "nu") {
     // Get MC truth
-    art::Handle< vector< MCTruth > > truthHandle;
+    art::Handle<std::vector<simb::MCTruth>> truthHandle;
     e.getByLabel(fTruthLabel, truthHandle);
     if (!truthHandle.isValid() || truthHandle->size() == 0) {
       throw art::Exception(art::errors::LogicError)
@@ -178,7 +151,7 @@ void HDF5Maker::analyze(art::Event const& e)
     }
     simb::MCNeutrino nutruth = truthHandle->at(0).GetNeutrino();
 
-    array<float, 3> nuMomentum {
+    std::array<float, 3> nuMomentum {
       (float)nutruth.Nu().Momentum().Vect().Unit().X(),
       (float)nutruth.Nu().Momentum().Vect().Unit().Y(),
       (float)nutruth.Nu().Momentum().Vect().Unit().Z()
@@ -190,31 +163,31 @@ void HDF5Maker::analyze(art::Event const& e)
       nutruth.Lepton().E(),
       nuMomentum.data()
     );
-    LogInfo("HDF5Maker") << "Filling event table"
-                         << "\nrun " << evtID[0] << ", subrun " << evtID[1]
-                         << ", event " << evtID[2]
-                         << "\nis cc? " << (nutruth.CCNC() == simb::kCC)
-                         << ", nu energy " << nutruth.Nu().E()
-                         << ", lepton energy " << nutruth.Lepton().E()
-                         << "\nnu momentum x " << nuMomentum[0] << ", y "
-                         << nuMomentum[1] << ", z " << nuMomentum[2];
+    mf::LogInfo("HDF5Maker") << "Filling event table"
+                             << "\nrun " << evtID[0] << ", subrun " << evtID[1]
+                             << ", event " << evtID[2]
+                             << "\nis cc? " << (nutruth.CCNC() == simb::kCC)
+                             << ", nu energy " << nutruth.Nu().E()
+                             << ", lepton energy " << nutruth.Lepton().E()
+                             << "\nnu momentum x " << nuMomentum[0] << ", y "
+                             << nuMomentum[1] << ", z " << nuMomentum[2];
   } // if nu event info
 
   // Get spacepoints from the event record
-  art::Handle< vector< SpacePoint > > spListHandle;
-  vector< art::Ptr< SpacePoint > > splist;
+  art::Handle<std::vector<recob::SpacePoint>> spListHandle;
+  std::vector<art::Ptr<recob::SpacePoint>> splist;
   if (e.getByLabel(fSPLabel, spListHandle))
     art::fill_ptr_vector(splist, spListHandle);
 
   // Get hits from the event record
-  art::Handle< vector< Hit > > hitListHandle;
-  vector< art::Ptr< Hit > > hitlist;
+  art::Handle<std::vector<recob::Hit>> hitListHandle;
+  std::vector<art::Ptr<recob::Hit>> hitlist;
   if (e.getByLabel(fHitLabel, hitListHandle))
     art::fill_ptr_vector(hitlist, hitListHandle);
 
   // Get assocations from spacepoints to hits
-  art::FindManyP< Hit > fmp(spListHandle, e, fSPLabel);
-  vector< vector< art::Ptr< Hit > > > sp2Hit(splist.size());
+  art::FindManyP<recob::Hit> fmp(spListHandle, e, fSPLabel);
+  std::vector<std::vector<art::Ptr<recob::Hit>>> sp2Hit(splist.size());
   for (size_t spIdx = 0; spIdx < sp2Hit.size(); ++spIdx) {
     sp2Hit[spIdx] = fmp.at(spIdx);
   } // for spacepoint
@@ -222,13 +195,13 @@ void HDF5Maker::analyze(art::Event const& e)
   // Fill spacepoint table
   for (size_t i = 0; i < splist.size(); ++i) {
 
-    array<float, 3> pos {
+    std::array<float, 3> pos {
       (float)splist[i]->XYZ()[0],
       (float)splist[i]->XYZ()[1],
       (float)splist[i]->XYZ()[2]
     };
 
-    array<int, 3> hitID { -1, -1, -1 };
+    std::array<int, 3> hitID { -1, -1, -1 };
     for (size_t j = 0; j < sp2Hit[i].size(); ++j)
       hitID[sp2Hit[i][j]->View()] = sp2Hit[i][j].key();
 
@@ -236,20 +209,20 @@ void HDF5Maker::analyze(art::Event const& e)
       splist[i]->ID(), pos.data(), hitID.data()
     );
 
-    LogInfo("HDF5Maker") << "Filling spacepoint table"
-                         << "\nrun " << evtID[0] << ", subrun " << evtID[1]
-                         << ", event " << evtID[2]
-                         << "\nspacepoint id " << splist[i]->ID()
-                         << "\nposition x " << pos[0] << ", y " << pos[1]
-                         << ", z " << pos[2]
-                         << "\nhit ids " << hitID[0] << ", " << hitID[1]
-                         << ", " << hitID[2];
+    mf::LogInfo("HDF5Maker") << "Filling spacepoint table"
+                             << "\nrun " << evtID[0] << ", subrun " << evtID[1]
+                             << ", event " << evtID[2]
+                             << "\nspacepoint id " << splist[i]->ID()
+                             << "\nposition x " << pos[0] << ", y " << pos[1]
+                             << ", z " << pos[2]
+                             << "\nhit ids " << hitID[0] << ", " << hitID[1]
+                             << ", " << hitID[2];
 
   } // for spacepoint
 
   std::set<int> g4id;
-  auto const clockData = ServiceHandle<DetectorClocksService>()->DataFor(e);
-  auto const detProp = ServiceHandle<DetectorPropertiesService>()->DataFor(e, clockData);
+  auto const clockData = art::ServiceHandle<detinfo::DetectorClocksService>()->DataFor(e);
+  auto const detProp = art::ServiceHandle<detinfo::DetectorPropertiesService>()->DataFor(e, clockData);
 
   std::unique_ptr<art::FindManyP<simb::MCParticle, anab::BackTrackerHitMatchingData>> hittruth;
   if (fUseMap) {
@@ -257,7 +230,7 @@ void HDF5Maker::analyze(art::Event const& e)
   }
 
   // Loop over hits
-  for (art::Ptr< Hit > hit : hitlist) {
+  for (art::Ptr<recob::Hit> hit : hitlist) {
 
     // Fill hit table
     geo::WireID wireid = hit->WireID();
@@ -270,18 +243,17 @@ void HDF5Maker::analyze(art::Event const& e)
       wireid.Plane, wireid.Wire, hit->PeakTime()
     );
 
-    LogInfo("HDF5Maker") << "Filling hit table"
-                         << "\nrun " << evtID[0] << ", subrun " << evtID[1]
-                         << ", event " << evtID[2]
-                         << "\nhit id " << hit.key() << ", integral "
-                         << hit->Integral() << ", RMS " << hit->RMS()
-                         << ", TPC " << wireid.TPC
-                         << "\nglobal plane " << plane << ", global wire "
-                         << wire << ", global time " << time
-                         << "\nlocal plane " << wireid.Plane
-                         << ", local wire " << wireid.Wire
-                         << ", local time " << hit->PeakTime();
-                         
+    mf::LogInfo("HDF5Maker") << "Filling hit table"
+                             << "\nrun " << evtID[0] << ", subrun " << evtID[1]
+                             << ", event " << evtID[2]
+                             << "\nhit id " << hit.key() << ", integral "
+                             << hit->Integral() << ", RMS " << hit->RMS()
+                             << ", TPC " << wireid.TPC
+                             << "\nglobal plane " << plane << ", global wire "
+                             << wire << ", global time " << time
+                             << "\nlocal plane " << wireid.Plane
+                             << ", local wire " << wireid.Wire
+                             << ", local time " << hit->PeakTime();
 
     // Fill energy deposit table
     if (fUseMap) {
@@ -293,35 +265,34 @@ void HDF5Maker::analyze(art::Event const& e)
 	fEnergyDepNtuple->insert(evtID.data(),
 		hit.key(), particle_vec[i_p]->TrackId(), match_vec[i_p]->ideFraction
 	);
-	LogInfo("HDF5Maker") << "Filling energy deposit table"
-			     << "\nrun " << evtID[0] << ", subrun " << evtID[1]
-			     << ", event " << evtID[2]
-			     << "\nhit id " << hit.key() << ", g4 id "
-			     << particle_vec[i_p]->TrackId() << ", energy fraction "
-			     << match_vec[i_p]->ideFraction;
+	mf::LogInfo("HDF5Maker") << "Filling energy deposit table"
+	        		 << "\nrun " << evtID[0] << ", subrun " << evtID[1]
+			         << ", event " << evtID[2]
+			         << "\nhit id " << hit.key() << ", g4 id "
+			         << particle_vec[i_p]->TrackId() << ", energy fraction "
+			         << match_vec[i_p]->ideFraction;
       }
     } else {
-      for (const TrackIDE& ide : bt->HitToTrackIDEs(clockData, hit)) {
+      for (const sim::TrackIDE& ide : bt->HitToTrackIDEs(clockData, hit)) {
 	g4id.insert(ide.trackID);
 	fEnergyDepNtuple->insert(evtID.data(),
-		hit.key(), ide.trackID, ide.energy
-  );
-	LogInfo("HDF5Maker") << "Filling energy deposit table"
-			     << "\nrun " << evtID[0] << ", subrun " << evtID[1]
-			     << ", event " << evtID[2]
-			     << "\nhit id " << hit.key() << ", g4 id "
-			     << ide.trackID << ", energy "
-			     << ide.energy << " MeV";
+		hit.key(), ide.trackID, ide.energy);
+	mf::LogInfo("HDF5Maker") << "Filling energy deposit table"
+                                 << "\nrun " << evtID[0] << ", subrun " << evtID[1]
+                                 << ", event " << evtID[2]
+			         << "\nhit id " << hit.key() << ", g4 id "
+			         << ide.trackID << ", energy "
+			         << ide.energy << " MeV";
       } // for energy deposit
     } // if using microboone map method or not
   } // for hit
 
-  ServiceHandle<ParticleInventoryService> pi;
-  set<int> allIDs = g4id; // Copy original so we can safely modify it
+  art::ServiceHandle<cheat::ParticleInventoryService> pi;
+  std::set<int> allIDs = g4id; // Copy original so we can safely modify it
 
   // Add invisible particles to hierarchy
   for (int id : g4id) {
-    const MCParticle* p = pi->TrackIdToParticle_P(abs(id));
+    const simb::MCParticle* p = pi->TrackIdToParticle_P(abs(id));
     while (p->Mother() != 0) {
       allIDs.insert(abs(p->Mother()));
       p = pi->TrackIdToParticle_P(abs(p->Mother()));
@@ -330,28 +301,28 @@ void HDF5Maker::analyze(art::Event const& e)
 
   // Loop over true particles and fill table
   for (int id : allIDs) {
-    const MCParticle* p = pi->TrackIdToParticle_P(abs(id));
+    const simb::MCParticle* p = pi->TrackIdToParticle_P(abs(id));
     if (p==NULL) continue;
-    array<float, 3> particleStart { (float)p->Vx(), (float)p->Vy(), (float)p->Vz() };
-    array<float, 3> particleEnd { (float)p->EndX(), (float)p->EndY(), (float)p->EndZ() };
+    std::array<float, 3> particleStart { (float)p->Vx(), (float)p->Vy(), (float)p->Vz() };
+    std::array<float, 3> particleEnd { (float)p->EndX(), (float)p->EndY(), (float)p->EndZ() };
     fParticleNtuple->insert(evtID.data(),
       abs(id), p->PdgCode(), p->Mother(), (float)p->P(),
       particleStart.data(), particleEnd.data(),
       p->Process(), p->EndProcess()
     );
-    LogInfo("HDF5Maker") << "Filling particle table"
-                         << "\nrun " << evtID[0] << ", subrun " << evtID[1]
-                         << ", event " << evtID[2]
-                         << "\ng4 id " << abs(id) << ", pdg code "
-                         << p->PdgCode() << ", parent " << p->Mother()
-                         << ", momentum " << p->P()
-                         << "\nparticle start x " << particleStart[0]
-                         << ", y " << particleStart[1]
-                         << ", z " << particleStart[2]
-                         << "\nparticle end x " << particleEnd[0] << ", y "
-                         << particleEnd[1] << ", z " << particleEnd[2]
-                         << "\nstart process " << p->Process()
-                         << ", end process " << p->EndProcess();
+    mf::LogInfo("HDF5Maker") << "Filling particle table"
+                             << "\nrun " << evtID[0] << ", subrun " << evtID[1]
+                             << ", event " << evtID[2]
+                             << "\ng4 id " << abs(id) << ", pdg code "
+                             << p->PdgCode() << ", parent " << p->Mother()
+                             << ", momentum " << p->P()
+                             << "\nparticle start x " << particleStart[0]
+                             << ", y " << particleStart[1]
+                             << ", z " << particleStart[2]
+                             << "\nparticle end x " << particleEnd[0] << ", y "
+                             << particleEnd[1] << ", z " << particleEnd[2]
+                             << "\nstart process " << p->Process()
+                             << ", end process " << p->EndProcess();
   }
 } // function HDF5Maker::analyze
 
@@ -362,68 +333,68 @@ void HDF5Maker::beginSubRun(art::SubRun const& sr) {
 
   // Open HDF5 output
   std::ostringstream fileName;
-  fileName << fOutputName << "_r" << setfill('0') << setw(5) << sr.run()
-    << "_s" << setfill('0') << setw(5) << sr.subRun() << "_ts" << setw(6) << now.tv_usec << ".h5";
+  fileName << fOutputName << "_r" << std::setfill('0') << std::setw(5) << sr.run()
+    << "_s" << std::setfill('0') << std::setw(5) << sr.subRun() << "_ts" << std::setw(6) << now.tv_usec << ".h5";
 
   fFile = hep_hpc::hdf5::File(fileName.str(), H5F_ACC_TRUNC);
 
   if (fEventInfo == "none")
     fEventNtuple = new hep_hpc::hdf5::Ntuple(
-      make_ntuple({fFile, "event_table", 1000},
-        make_column<int>("event_id", 3)
+      hep_hpc::hdf5::make_ntuple({fFile, "event_table", 1000},
+        hep_hpc::hdf5::make_column<int>("event_id", 3)
     ));
   if (fEventInfo == "nu")
     fEventNtupleNu = new hep_hpc::hdf5::Ntuple(
-      make_ntuple({fFile, "event_table", 1000},
-        make_column<int>("event_id", 3),
-        make_scalar_column<int>("is_cc"),
-        make_scalar_column<float>("nu_energy"),
-        make_scalar_column<float>("lep_energy"),
-        make_column<float>("nu_dir", 3)
+      hep_hpc::hdf5::make_ntuple({fFile, "event_table", 1000},
+        hep_hpc::hdf5::make_column<int>("event_id", 3),
+        hep_hpc::hdf5::make_scalar_column<int>("is_cc"),
+        hep_hpc::hdf5::make_scalar_column<float>("nu_energy"),
+        hep_hpc::hdf5::make_scalar_column<float>("lep_energy"),
+        hep_hpc::hdf5::make_column<float>("nu_dir", 3)
     ));
 
   fSpacePointNtuple = new hep_hpc::hdf5::Ntuple(
-    make_ntuple({fFile, "spacepoint_table", 1000},
-      make_column<int>("event_id", 3),
-      make_scalar_column<int>("spacepoint_id"),
-      make_column<float>("position", 3),
-      make_column<int>("hit_id", 3)
+    hep_hpc::hdf5::make_ntuple({fFile, "spacepoint_table", 1000},
+      hep_hpc::hdf5::make_column<int>("event_id", 3),
+      hep_hpc::hdf5::make_scalar_column<int>("spacepoint_id"),
+      hep_hpc::hdf5::make_column<float>("position", 3),
+      hep_hpc::hdf5::make_column<int>("hit_id", 3)
   ));
 
   fHitNtuple = new hep_hpc::hdf5::Ntuple(
-    make_ntuple({fFile, "hit_table", 1000},
-      make_column<int>("event_id", 3),
-      make_scalar_column<int>("hit_id"),
-      make_scalar_column<float>("integral"),
-      make_scalar_column<float>("rms"),
-      make_scalar_column<int>("tpc"),
-      make_scalar_column<int>("global_plane"),
-      make_scalar_column<float>("global_wire"),
-      make_scalar_column<float>("global_time"),
-      make_scalar_column<int>("local_plane"),
-      make_scalar_column<float>("local_wire"),
-      make_scalar_column<float>("local_time")
+    hep_hpc::hdf5::make_ntuple({fFile, "hit_table", 1000},
+      hep_hpc::hdf5::make_column<int>("event_id", 3),
+      hep_hpc::hdf5::make_scalar_column<int>("hit_id"),
+      hep_hpc::hdf5::make_scalar_column<float>("integral"),
+      hep_hpc::hdf5::make_scalar_column<float>("rms"),
+      hep_hpc::hdf5::make_scalar_column<int>("tpc"),
+      hep_hpc::hdf5::make_scalar_column<int>("global_plane"),
+      hep_hpc::hdf5::make_scalar_column<float>("global_wire"),
+      hep_hpc::hdf5::make_scalar_column<float>("global_time"),
+      hep_hpc::hdf5::make_scalar_column<int>("local_plane"),
+      hep_hpc::hdf5::make_scalar_column<float>("local_wire"),
+      hep_hpc::hdf5::make_scalar_column<float>("local_time")
   ));
 
   fParticleNtuple = new hep_hpc::hdf5::Ntuple(
-    make_ntuple({fFile, "particle_table", 1000},
-      make_column<int>("event_id", 3),
-      make_scalar_column<int>("g4_id"),
-      make_scalar_column<int>("type"),
-      make_scalar_column<int>("parent_id"),
-      make_scalar_column<float>("momentum"),
-      make_column<float>("start_position", 3),
-      make_column<float>("end_position", 3),
-      make_scalar_column<string>("start_process"),
-      make_scalar_column<string>("end_process")
+    hep_hpc::hdf5::make_ntuple({fFile, "particle_table", 1000},
+      hep_hpc::hdf5::make_column<int>("event_id", 3),
+      hep_hpc::hdf5::make_scalar_column<int>("g4_id"),
+      hep_hpc::hdf5::make_scalar_column<int>("type"),
+      hep_hpc::hdf5::make_scalar_column<int>("parent_id"),
+      hep_hpc::hdf5::make_scalar_column<float>("momentum"),
+      hep_hpc::hdf5::make_column<float>("start_position", 3),
+      hep_hpc::hdf5::make_column<float>("end_position", 3),
+      hep_hpc::hdf5::make_scalar_column<std::string>("start_process"),
+      hep_hpc::hdf5::make_scalar_column<std::string>("end_process")
   ));
 
   fEnergyDepNtuple = new hep_hpc::hdf5::Ntuple(
-    make_ntuple({fFile, "edep_table", 1000},
-      make_column<int>("event_id", 3),
-      make_scalar_column<int>("hit_id"),
-      make_scalar_column<int>("g4_id"),
-      make_scalar_column<float>("energy")
+    hep_hpc::hdf5::make_ntuple({fFile, "edep_table", 1000},
+      hep_hpc::hdf5::make_column<int>("event_id", 3),
+      hep_hpc::hdf5::make_scalar_column<int>("hit_id"),
+      hep_hpc::hdf5::make_scalar_column<int>("g4_id"),
+      hep_hpc::hdf5::make_scalar_column<float>("energy")
   ));
 }
 
