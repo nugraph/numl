@@ -3,10 +3,10 @@ defaultqual e20:prof
 
 product 	version
 cetbuildtools   v8_20_00  -  only_for_build
-dunereco        v09_63_01d00
+dunesw          v09_63_01d00
 end_product_list
 
-qualifier   dunereco    hep_hpc   notes
+qualifier   dunesw      hep_hpc   notes
 e20:debug   e20:debug   e20:debug
 e20:prof    e20:prof    e20:prof
 end_qualifier_list
