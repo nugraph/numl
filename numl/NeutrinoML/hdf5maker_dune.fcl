@@ -13,7 +13,6 @@ services:
   RandomNumberGenerator: {}
   FileCatalogMetadata:   @local::art_file_catalog_mc
   @table::dunefd_1x2x6_reco_services
-  Geometry:              @local::dune10kt_1x2x6_v2_geo
   message:               @local::dune_message_services
 }
 
