@@ -274,6 +274,13 @@ void HDF5Maker::analyze(art::Event const& e)
       }
     } else {
       for (const sim::TrackIDE& ide : bt->HitToTrackIDEs(clockData, hit)) {
+        if (ide.trackID < 0)
+          throw art::Exception(art::errors::LogicError)
+            << "Negative track ID (" << ide.trackID << ") found in simulated "
+            << "energy deposits! This is usually an indication that you're "
+            << "running over simulation from before the larsoft Geant4 "
+            << "refactor, which is not supported due to its incomplete MC "
+            << "truth record.";
 	g4id.insert(ide.trackID);
 	fEnergyDepNtuple->insert(evtID.data(),
 		hit.key(), ide.trackID, ide.energy);
