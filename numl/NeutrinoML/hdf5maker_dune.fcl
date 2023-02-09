@@ -1,5 +1,4 @@
 #include "services_dune.fcl"
-#include "SpacePointSolver.fcl"
 #include "HDF5Maker.fcl"
 #include "tools_dune.fcl"
 
@@ -25,20 +24,15 @@ source:
 physics:
 {
 
-  producers:
-  {
-    sps:   @local::standard_spacepointsolver
-  }
-
   analyzers:
   {
     hdf5maker:   @local::hdf5maker
   }
 
-  simulate:  [ sps ]
   ana:       [ hdf5maker ]
-  trigger_paths: [ simulate ]
   end_paths:     [ ana ]  
 }
+
+physics.analyzers.hdf5maker.SPLabel: "spsolve"
 
 services.message.destinations.LogStandardOut.threshold: "INFO"
