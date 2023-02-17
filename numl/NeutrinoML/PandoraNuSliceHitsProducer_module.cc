@@ -55,6 +55,7 @@ private:
   std::string fSliceLabel;
   std::string fHitLabel;
   std::string fHitTruthLabel;
+  unsigned int fMaxHits;
 };
 
 
@@ -63,7 +64,8 @@ PandoraNuSliceHitsProducer::PandoraNuSliceHitsProducer(fhicl::ParameterSet const
   fPfpLabel(p.get<std::string>("PfpLabel","pandora")),
   fSliceLabel(p.get<std::string>("SliceLabel","pandora")),
   fHitLabel(p.get<std::string>("HitLabel","gaushit")),
-  fHitTruthLabel(p.get<std::string>("HitTruthLabel","gaushitTruthMatch"))
+  fHitTruthLabel(p.get<std::string>("HitTruthLabel","gaushitTruthMatch")),
+  fMaxHits(p.get<unsigned int>("MaxHits",20000))
   // More initializers here.
 {
   // Call appropriate produces<>() functions here.
@@ -115,6 +117,12 @@ void PandoraNuSliceHitsProducer::produce(art::Event& e)
     }
   }
 
+  if (outputHits->size() > fMaxHits/2) std::cout << "hit collection size = " << outputHits->size() << " with fMaxHits=" << fMaxHits << std::endl;
+  if (outputHits->size()>fMaxHits) {
+    outputHits->clear();
+    HitParticleAssociations empty;
+    outputHitPartAssns->swap(empty);
+  }
   e.put(std::move(outputHits));
   e.put(std::move(outputHitPartAssns));
 
