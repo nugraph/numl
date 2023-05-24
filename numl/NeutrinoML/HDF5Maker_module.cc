@@ -936,7 +936,7 @@ void HDF5Maker::createFile(const art::SubRun* sr) {
     make_ntuple({fFile, "particle_table", 1000},
       make_column<int>("event_id", 3),
       make_scalar_column<int>("g4_id"),
-      make_scalar_column<int>("g4_pdg"),
+      make_scalar_column<int>("type"),
       make_scalar_column<int>("parent_id"),
       make_scalar_column<int>("category"),
       make_scalar_column<int>("instance"),
