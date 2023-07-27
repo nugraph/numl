@@ -62,6 +62,7 @@ private:
 
   hep_hpc::hdf5::Ntuple<hep_hpc::hdf5::Column<int, 1>,    // event id (run, subrun, event)
                         hep_hpc::hdf5::Column<int, 1>,    // is cc
+			hep_hpc::hdf5::Column<int, 1>,     // pdg code
                         hep_hpc::hdf5::Column<float, 1>,  // nu energy
                         hep_hpc::hdf5::Column<float, 1>,  // lep energy
                         hep_hpc::hdf5::Column<float, 1>   // nu dir (x, y, z)
@@ -159,6 +160,7 @@ void HDF5Maker::analyze(art::Event const& e)
 
     fEventNtupleNu->insert( evtID.data(),
       nutruth.CCNC() == simb::kCC,
+      nutruth.Nu().PdgCode(),
       nutruth.Nu().E(),
       nutruth.Lepton().E(),
       nuMomentum.data()
@@ -355,6 +357,7 @@ void HDF5Maker::beginSubRun(art::SubRun const& sr) {
       hep_hpc::hdf5::make_ntuple({fFile, "event_table", 1000},
         hep_hpc::hdf5::make_column<int>("event_id", 3),
         hep_hpc::hdf5::make_scalar_column<int>("is_cc"),
+	hep_hpc::hdf5::make_scalar_column<int>("nu_pdg"),
         hep_hpc::hdf5::make_scalar_column<float>("nu_energy"),
         hep_hpc::hdf5::make_scalar_column<float>("lep_energy"),
         hep_hpc::hdf5::make_column<float>("nu_dir", 3)
