@@ -34,5 +34,4 @@ physics:
 }
 
 physics.analyzers.hdf5maker.SPLabel: "spsolve"
-physics.analyzers.hdf5maker.EventInfo: "nu"
 services.BackTrackerService.BackTracker.SimChannelModuleLabel: "elecDrift"
