@@ -66,6 +66,10 @@ private:
                         hep_hpc::hdf5::Column<float, 1>,  // nu energy
                         hep_hpc::hdf5::Column<float, 1>,  // lep energy
                         hep_hpc::hdf5::Column<float, 1>   // nu dir (x, y, z)
+			hep_hpc::hdf5::Column<float, 1> // nu vertex position (x, y, z)
+			hep_hpc::hdf5::Column<float, 1> // nu vertex position, corrected (x, y, z) 
+			hep_hpc::hdf5::Column<int, 1> // nu vertex corrected wire pos
+			hep_hpc::hdf5::Column<float, 1> // nu vertex corrected wire time
   >* fEventNtupleNu; ///< event ntuple with neutrino information
 
   hep_hpc::hdf5::Ntuple<hep_hpc::hdf5::Column<int, 1>,    // event id (run, subrun, event)
@@ -151,28 +155,40 @@ void HDF5Maker::analyze(art::Event const& e)
         << "Expected to find exactly one MC truth object!";
     }
     simb::MCNeutrino nutruth = truthHandle->at(0).GetNeutrino();
-
-    std::array<float, 3> nuMomentum {
+    array<float, 3> nuDirection {
       (float)nutruth.Nu().Momentum().Vect().Unit().X(),
       (float)nutruth.Nu().Momentum().Vect().Unit().Y(),
       (float)nutruth.Nu().Momentum().Vect().Unit().Z()
     };
+
+    array<float, 3> nuVtx { (float)nutruth.Nu().Vx(), (float)nutruth.Nu().Vy(), (float)nutruth.Nu().Vz() };
+    
+    float nuT = nutruth.Nu().T();
+    array<float, 3> nuVtxCorr { (float)nutruth.Nu().Vx(), (float)nutruth.Nu().Vy(), (float)nutruth.Nu().Vz() };
+    True2RecoMappingXYZ(nuT, nuVtxCorr[0], nuVtxCorr[1], nuVtxCorr[2]);
+
+    vector<int> nearwires;
+    for (auto p : geo->IteratePlaneIDs()) nearwires.push_back(NearWire(*geo,p,nuVtxCorr[0],nuVtxCorr[1],nuVtxCorr[2]));
 
     fEventNtupleNu->insert( evtID.data(),
       nutruth.CCNC() == simb::kCC,
       nutruth.Nu().PdgCode(),
       nutruth.Nu().E(),
       nutruth.Lepton().E(),
-      nuMomentum.data()
+      nuDirection.data(),
+      nuVtx.data(),
+      nuVtxCorr.data(),
+      nearwires.data(),
+      nuT
     );
-    mf::LogInfo("HDF5Maker") << "Filling event table"
-                             << "\nrun " << evtID[0] << ", subrun " << evtID[1]
-                             << ", event " << evtID[2]
-                             << "\nis cc? " << (nutruth.CCNC() == simb::kCC)
-                             << ", nu energy " << nutruth.Nu().E()
-                             << ", lepton energy " << nutruth.Lepton().E()
-                             << "\nnu momentum x " << nuMomentum[0] << ", y "
-                             << nuMomentum[1] << ", z " << nuMomentum[2];
+    LogInfo("HDF5Maker") << "Filling event table"
+                         << "\nrun " << evtID[0] << ", subrun " << evtID[1]
+                         << ", event " << evtID[2]
+                         << "\nis cc? " << (nutruth.CCNC() == simb::kCC)
+                         << ", nu energy " << nutruth.Nu().E()
+                         << ", lepton energy " << nutruth.Lepton().E()
+                         << "\nnu direction x " << nuDirection[0] << ", y "
+                         << nuDirection[1] << ", z " << nuDirection[2];
   } // if nu event info
 
   // Get spacepoints from the event record
@@ -355,12 +371,16 @@ void HDF5Maker::beginSubRun(art::SubRun const& sr) {
   if (fEventInfo == "nu")
     fEventNtupleNu = new hep_hpc::hdf5::Ntuple(
       hep_hpc::hdf5::make_ntuple({fFile, "event_table", 1000},
-        hep_hpc::hdf5::make_column<int>("event_id", 3),
-        hep_hpc::hdf5::make_scalar_column<int>("is_cc"),
-	hep_hpc::hdf5::make_scalar_column<int>("nu_pdg"),
-        hep_hpc::hdf5::make_scalar_column<float>("nu_energy"),
-        hep_hpc::hdf5::make_scalar_column<float>("lep_energy"),
-        hep_hpc::hdf5::make_column<float>("nu_dir", 3)
+      hep_hpc::hdf5::make_column<int>("event_id", 3),
+      hep_hpc::hdf5::make_scalar_column<int>("is_cc"),
+      hep_hpc::hdf5::make_scalar_column<int>("nu_pdg"),
+      hep_hpc::hdf5::make_scalar_column<float>("nu_energy"),
+      hep_hpc::hdf5::make_scalar_column<float>("lep_energy"),
+      hep_hpc::hdf5::make_column<float>("nu_dir", 3),
+      hep_hpc::hdf5::make_column<float>("nu_vtx", 3),
+      hep_hpc::hdf5::make_column<float>("nu_vtx_corr", 3),
+      hep_hpc::hdf5::make_column<int>("nu_vtx_wire_pos", ServiceHandle<geo::Geometry>()->Nviews()),
+      hep_hpc::hdf5::make_scalar_column<float>("nu_vtx_wire_time")
     ));
 
   fSpacePointNtuple = new hep_hpc::hdf5::Ntuple(
