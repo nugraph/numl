@@ -7,6 +7,7 @@
 // from cetlib version v3_11_01.
 ////////////////////////////////////////////////////////////////////////
 
+
 #include "art/Framework/Core/EDAnalyzer.h"
 #include "art/Framework/Core/ModuleMacros.h"
 #include "art/Framework/Principal/Event.h"
@@ -21,14 +22,61 @@
 #include "nusimdata/SimulationBase/MCTruth.h"
 #include "lardataobj/RecoBase/Hit.h"
 #include "lardataobj/RecoBase/SpacePoint.h"
+#include "lardataobj/RecoBase/Slice.h"
+#include "lardataobj/RecoBase/PFParticle.h"
+#include "lardataobj/RecoBase/Vertex.h"
+#include "lardataobj/RecoBase/Cluster.h"
+#include "lardata/RecoBaseProxy/ProxyBase.h"
+#include "lardataobj/RecoBase/PFParticleMetadata.h"
+#include "lardataobj/RecoBase/Wire.h"
+#include "lardataobj/RecoBase/OpHit.h"
+#include "lardataobj/RecoBase/OpFlash.h"
+#include "lardataobj/AnalysisBase/T0.h"
 
 #include "larsim/MCCheater/BackTrackerService.h"
 #include "larsim/MCCheater/ParticleInventoryService.h"
 #include "lardata/DetectorInfoServices/DetectorPropertiesService.h"
+#include "larcore/Geometry/Geometry.h"
+
+#include "larevt/SpaceChargeServices/SpaceChargeService.h"
+#include "lardata/DetectorInfoServices/DetectorPropertiesService.h"
+#include "lardata/DetectorInfoServices/DetectorClocksService.h"
 
 #include "lardataobj/AnalysisBase/BackTrackerMatchingData.h"
 
+#include "lardataobj/MCBase/MCShower.h"
+#include "lardataobj/MCBase/MCTrack.h"
+
 #include "hep_hpc/hdf5/make_ntuple.hpp"
+using std::array;
+using std::endl;
+using std::setfill;
+using std::set;
+using std::setw;
+using std::string;
+using std::vector;
+
+using simb::MCParticle;
+using simb::MCTruth;
+using sim::TrackIDE;
+using recob::Hit;
+using recob::OpHit;
+using recob::OpFlash;
+using recob::SpacePoint;
+using recob::Wire;
+
+using mf::LogInfo;
+
+using art::ServiceHandle;
+using cheat::BackTrackerService;
+using cheat::ParticleInventoryService;
+using detinfo::DetectorClocksService;
+using detinfo::DetectorPropertiesService;
+
+using hep_hpc::hdf5::Column;
+using hep_hpc::hdf5::make_ntuple;
+using hep_hpc::hdf5::make_scalar_column;
+using hep_hpc::hdf5::make_column;
 
 class HDF5Maker : public art::EDAnalyzer {
 public:
@@ -65,10 +113,10 @@ private:
 			hep_hpc::hdf5::Column<int, 1>,     // pdg code
                         hep_hpc::hdf5::Column<float, 1>,  // nu energy
                         hep_hpc::hdf5::Column<float, 1>,  // lep energy
-                        hep_hpc::hdf5::Column<float, 1>   // nu dir (x, y, z)
-			hep_hpc::hdf5::Column<float, 1> // nu vertex position (x, y, z)
-			hep_hpc::hdf5::Column<float, 1> // nu vertex position, corrected (x, y, z) 
-			hep_hpc::hdf5::Column<int, 1> // nu vertex corrected wire pos
+                        hep_hpc::hdf5::Column<float, 1>,   // nu dir (x, y, z)
+			hep_hpc::hdf5::Column<float, 1>, // nu vertex position (x, y, z)
+			hep_hpc::hdf5::Column<float, 1>, // nu vertex position, corrected (x, y, z) 
+			hep_hpc::hdf5::Column<int, 1>, // nu vertex corrected wire pos
 			hep_hpc::hdf5::Column<float, 1> // nu vertex corrected wire time
   >* fEventNtupleNu; ///< event ntuple with neutrino information
 
