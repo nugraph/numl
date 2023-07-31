@@ -109,6 +109,70 @@ private:
   >* fEnergyDepNtuple; ///< energy deposition ntuple
 };
 
+  using ProxyPfpColl_t = decltype(proxy::getCollection<std::vector<recob::PFParticle> >(
+                std::declval<art::Event>(),std::declval<art::InputTag>(),
+                proxy::withAssociated<larpandoraobj::PFParticleMetadata>(std::declval<art::InputTag>()),
+                proxy::withAssociated<recob::Slice>(std::declval<art::InputTag>()),
+                proxy::withAssociated<recob::Cluster>(std::declval<art::InputTag>()),
+                proxy::withAssociated<recob::Vertex>(std::declval<art::InputTag>()),
+                proxy::withAssociated<anab::T0>(std::declval<art::InputTag>()) ));
+  using ProxyPfpElem_t = ProxyPfpColl_t::element_proxy_t;
+
+  // proxy to connect cluster to hit
+  using ProxyClusColl_t = decltype(proxy::getCollection<std::vector<recob::Cluster>>(
+      std::declval<art::Event>(), std::declval<art::InputTag>(),
+      proxy::withAssociated<recob::Hit>(std::declval<art::InputTag>())));
+  using ProxyClusElem_t = ProxyClusColl_t::element_proxy_t;
+
+  void True2RecoMappingXYZ(float& t, float& x, float& y, float& z);
+  void ApplySCEMappingXYZ(float& x, float& y, float& z);
+  void AddDaughters(const std::map<unsigned int, unsigned int>& pfpmap, const ProxyPfpElem_t &pfp_pxy, const ProxyPfpColl_t &pfp_pxy_col, std::vector<ProxyPfpElem_t> &slice_v);
+  float GetMetaData(const ProxyPfpElem_t &pfp_pxy, string metaDataName);
+  int NearWire(const geo::Geometry& geo, const geo::PlaneID &ip, const float x, const float y, const float z);
+
+  struct BtPart {
+  public:
+
+    BtPart(const int pdg_, const int category_, const float px_, const float py_, const float pz_, const float e_,
+	   const std::vector<unsigned int> &tids_, const float start_x_, const float start_y_, const float start_z_, const float start_t_) :
+      pdg(pdg_),category(category_),px(px_),py(py_),pz(pz_),e(e_),
+      tids(tids_), start_x(start_x_), start_y(start_y_), start_z(start_z_), start_t(start_t_)
+      {}
+
+    BtPart(const int pdg_, const int category_, const float px_, const float py_, const float pz_, const float e_,
+	   const unsigned int tid_, const float start_x_, const float start_y_, const float start_z_, const float start_t_) :
+      pdg(pdg_), category(category_), px(px_), py(py_), pz(pz_), e(e_),
+      start_x(start_x_), start_y(start_y_), start_z(start_z_), start_t(start_t_)
+      { tids.push_back(tid_); }
+
+    int pdg;
+    int category;
+    float px, py, pz, e;
+    std::vector<unsigned int> tids;
+    int nhits = 0;
+    float start_x, start_y, start_z, start_t;
+  };
+
+  enum ParticleCategory {
+    Pion     = 0,
+    Muon     = 1,
+    Kaon     = 2,
+    Proton   = 3,
+    Electron = 4,
+    Michel   = 5,
+    Delta    = 6,
+    OtherNu  = 7,
+    Photon   = 8
+  };
+
+  std::vector<BtPart> initBacktrackingParticleVec(const std::vector<sim::MCShower> &inputMCShower,
+						  const std::vector<sim::MCTrack> &inputMCTrack,
+						  const std::vector<recob::Hit> &inputHits,
+						  const std::unique_ptr<art::FindManyP<simb::MCParticle, anab::BackTrackerHitMatchingData>> &assocMCPart,
+						  int nhitcut = 5);
+
+};
+
 
 HDF5Maker::HDF5Maker(fhicl::ParameterSet const& p)
   : EDAnalyzer{p},
@@ -436,6 +500,169 @@ void HDF5Maker::endSubRun(art::SubRun const& sr) {
   delete fParticleNtuple;
   delete fEnergyDepNtuple;
   fFile.close();
+}
+
+
+// apply the mapping of XYZ true -> XYZ position as it would be recosntructed.
+// takes into account SCE, trigger time offset, and wirecell-pandora offset.
+// to be applied to truth xyz in order to compare to reconstructed variables
+// e.g. used for resolution plots
+void HDF5Maker::True2RecoMappingXYZ(float& t, float& x, float& y, float& z)
+{
+  ApplySCEMappingXYZ(x, y, z);
+  auto const &detProperties = lar::providerFrom<detinfo::DetectorPropertiesService>();
+  auto const &detClocks = lar::providerFrom<detinfo::DetectorClocksService>();
+  double g4Ticks = detClocks->TPCG4Time2Tick(t) + detProperties->GetXTicksOffset(0, 0, 0) - detProperties->TriggerOffset();
+  float _xtimeoffset = detProperties->ConvertTicksToX(g4Ticks, 0, 0, 0);
+  x += _xtimeoffset;
+  x += fXOffset;
+}
+
+// apply the mapping of XYZ true -> XYZ position after SCE-induced shift.
+// to be applied to truth xyz in order to compare to reconstructed variables
+// e.g. used for resolution plots
+void HDF5Maker::ApplySCEMappingXYZ(float& x, float& y, float& z)
+{
+  auto const *SCE = lar::providerFrom<spacecharge::SpaceChargeService>();
+  if (SCE->EnableSimSpatialSCE() == true)
+    {
+      auto offset = SCE->GetPosOffsets(geo::Point_t(x, y, z));
+      x -= offset.X();
+      y += offset.Y();
+      z += offset.Z();
+    }
+}
+
+void HDF5Maker::AddDaughters(const std::map<unsigned int, unsigned int>& _pfpmap,
+			     const ProxyPfpElem_t &pfp_pxy,
+			     const ProxyPfpColl_t &pfp_pxy_col,
+			     std::vector<ProxyPfpElem_t> &slice_v)
+{
+
+  auto daughters = pfp_pxy->Daughters();
+
+  slice_v.push_back(pfp_pxy);
+
+  for (auto const &daughterid : daughters)
+  {
+
+    if (_pfpmap.find(daughterid) == _pfpmap.end())
+    {
+      std::cout << "Did not find DAUGHTERID in map! error" << std::endl;
+      continue;
+    }
+
+    auto pfp_pxy2 = pfp_pxy_col.begin();
+    for (size_t j = 0; j < _pfpmap.at(daughterid); ++j) ++pfp_pxy2;
+
+    AddDaughters(_pfpmap,*pfp_pxy2, pfp_pxy_col, slice_v);
+
+  } // for all daughters
+
+  return;
+} // AddDaughters
+
+float HDF5Maker::GetMetaData(const ProxyPfpElem_t &pfp_pxy, string metaDataName)
+{
+  const auto &pfParticleMetadataList = pfp_pxy.get<larpandoraobj::PFParticleMetadata>();
+  if (pfParticleMetadataList.size() == 0) return -999.;
+  for (unsigned int j = 0; j < pfParticleMetadataList.size(); ++j)
+    {
+      const art::Ptr<larpandoraobj::PFParticleMetadata> &pfParticleMetadata(pfParticleMetadataList.at(j));
+      auto pfParticlePropertiesMap = pfParticleMetadata->GetPropertiesMap();
+      if (!pfParticlePropertiesMap.empty())
+	{
+	  for (std::map<std::string, float>::const_iterator it = pfParticlePropertiesMap.begin(); it != pfParticlePropertiesMap.end(); ++it)
+	    {
+	      if (it->first == metaDataName)
+		return it->second;
+	    } // for map elements
+	} // if pfp metadata map not empty
+    } // for list
+  return -999.;
+}
+
+int HDF5Maker::NearWire(const geo::Geometry& geo, const geo::PlaneID &ip, const float x, const float y, const float z)
+{
+  geo::PlaneGeo const& plane = geo.Plane(ip);
+  geo::WireID wireID;
+  try {
+    wireID = plane.NearestWireID(geo::Point_t(x,y,z));
+  }
+  catch (geo::InvalidWireError const& e) {
+    if (!e.hasSuggestedWire()) throw;
+    wireID = plane.ClosestWireID(e.suggestedWireID());
+  }
+  return wireID.Wire;
+}
+
+std::vector<HDF5Maker::BtPart> HDF5Maker::initBacktrackingParticleVec(const std::vector<sim::MCShower> &inputMCShower,
+								      const std::vector<sim::MCTrack> &inputMCTrack,
+								      const std::vector<recob::Hit> &inputHits,
+								      const std::unique_ptr<art::FindManyP<simb::MCParticle, anab::BackTrackerHitMatchingData>> &assocMCPart,
+								      int nhitcut) {
+
+  std::vector<BtPart> btparts_v;
+  for (auto mcs : inputMCShower)
+  {
+    int category = -1;
+    if (mcs.Process() == "primary" && mcs.PdgCode()==22) category=ParticleCategory::Photon;//photon
+    else if (mcs.MotherPdgCode() == 111 && mcs.Process() == "Decay" && mcs.MotherProcess() == "primary") category=ParticleCategory::Photon;//photons from pi0
+    else if (mcs.Process() == "primary" && std::abs(mcs.PdgCode())==11) category=ParticleCategory::Electron;//electron
+    else if (std::abs(mcs.MotherPdgCode()) == 13 && mcs.Process() == "Decay") category=ParticleCategory::Michel;//michel electron
+    else if (std::abs(mcs.MotherPdgCode()) == 13 && mcs.Process() == "muIoni" && mcs.Start().Momentum().P()>10) category=ParticleCategory::Delta;//delta
+    else if (std::abs(mcs.MotherPdgCode()) == 211 && mcs.Process() == "hIoni" && mcs.Start().Momentum().P()>10) category=ParticleCategory::Delta;//delta
+    else continue;
+
+    sim::MCStep mc_step_shower_start = mcs.DetProfile();
+    btparts_v.push_back(BtPart(mcs.PdgCode(), category, mcs.Start().Momentum().Px() * 0.001, mcs.Start().Momentum().Py() * 0.001,
+			       mcs.Start().Momentum().Pz() * 0.001, mcs.Start().Momentum().E() * 0.001, mcs.DaughterTrackID(),
+			       mc_step_shower_start.X(), mc_step_shower_start.Y(), mc_step_shower_start.Z(), mc_step_shower_start.T()));
+
+  }
+  for (auto mct : inputMCTrack)
+  {
+
+    int category = -1;
+    if (std::abs(mct.PdgCode())==13) category=ParticleCategory::Muon;  //muon
+    else if (std::abs(mct.PdgCode())==2212) category=ParticleCategory::Proton;//proton
+    else if (std::abs(mct.PdgCode())==211) category=ParticleCategory::Pion; //charged pion
+    else if (std::abs(mct.PdgCode())==321) category=ParticleCategory::Kaon; //charged kaon
+    else continue;
+
+    sim::MCStep mc_step_track_start = mct.Start();
+    btparts_v.push_back(BtPart(mct.PdgCode(), category, mct.Start().Momentum().Px() * 0.001, mct.Start().Momentum().Py() * 0.001,
+			       mct.Start().Momentum().Pz() * 0.001, mct.Start().Momentum().E() * 0.001, mct.TrackID(),
+			       mc_step_track_start.X(), mc_step_track_start.Y(), mc_step_track_start.Z(), mc_step_track_start.T()));
+
+  }
+  // Now let's fill the nhits member using all input hits
+  for (unsigned int ih = 0; ih < inputHits.size(); ih++)
+  {
+    auto assmcp = assocMCPart->at(ih);
+    auto assmdt = assocMCPart->data(ih);
+    for (unsigned int ia = 0; ia < assmcp.size(); ++ia)
+    {
+      auto mcp = assmcp[ia];
+      auto amd = assmdt[ia];
+      if (amd->isMaxIDE != 1) continue;
+
+      for (auto &btp : btparts_v)
+      {
+        if (std::find(btp.tids.begin(), btp.tids.end(), mcp->TrackId()) != btp.tids.end())
+        {
+          btp.nhits++;
+        }
+      }
+    }
+  }
+  std::vector<BtPart> btparts_v_final;
+  for (size_t i=0;i<btparts_v.size();++i) {
+    if (btparts_v[i].nhits>nhitcut) {
+      btparts_v_final.push_back(btparts_v[i]);
+    }
+  }
+  return btparts_v_final;
 }
 
 DEFINE_ART_MODULE(HDF5Maker)
