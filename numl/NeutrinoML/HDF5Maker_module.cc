@@ -62,10 +62,10 @@ private:
 
   hep_hpc::hdf5::Ntuple<hep_hpc::hdf5::Column<int, 1>,    // event id (run, subrun, event)
                         hep_hpc::hdf5::Column<int, 1>,    // is cc
+			hep_hpc::hdf5::Column<int, 1>, // nu pdg
                         hep_hpc::hdf5::Column<float, 1>,  // nu energy
                         hep_hpc::hdf5::Column<float, 1>,  // lep energy
-                        hep_hpc::hdf5::Column<float, 1>,   // nu dir (x, y, z)
-			hep_hpc::hdf5::Column<int, 1> // nu pdg
+                        hep_hpc::hdf5::Column<float, 1>   // nu dir (x, y, z)
   >* fEventNtupleNu; ///< event ntuple with neutrino information
 
   hep_hpc::hdf5::Ntuple<hep_hpc::hdf5::Column<int, 1>,    // event id (run, subrun, event)
