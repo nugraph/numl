@@ -1,14 +1,14 @@
-parent numl v09_77_00
-defaultqual e20:prof
+parent numl v09_78_06
+defaultqual e26:prof
 
 product 	version
 cetbuildtools   v8_20_00  -  only_for_build
-dunesw          v09_77_00d00
+dunesw          v09_78_06d00
 end_product_list
 
 qualifier   dunesw      hep_hpc   notes
-e20:debug   e20:debug   e20:debug
-e20:prof    e20:prof    e20:prof
+e26:debug   e26:debug   e26:debug
+e26:prof    e26:prof    e26:prof
 end_qualifier_list
 
 # Preserve tabs and formatting in emacs and vi / vim:
