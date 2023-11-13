@@ -126,11 +126,13 @@ HDF5Maker::HDF5Maker(fhicl::ParameterSet const& p)
     fUseMap(    p.get<bool>("UseMap", false)),
     fEventInfo( p.get<std::string>("EventInfo")),
     fOutputName(p.get<std::string>("OutputName"))
+
 {
   if (fEventInfo != "none" && fEventInfo != "nu")
     throw art::Exception(art::errors::Configuration)
       << "EventInfo must be \"none\" or \"nu\", not " << fEventInfo;
 }
+  std::vector<double> tpc_ids_checked = {}; 
 
 void HDF5Maker::analyze(art::Event const& e)
 {
@@ -242,6 +244,7 @@ void HDF5Maker::analyze(art::Event const& e)
     hittruth = std::unique_ptr<art::FindManyP<simb::MCParticle, anab::BackTrackerHitMatchingData> >(new art::FindManyP<simb::MCParticle, anab::BackTrackerHitMatchingData>(hitListHandle, e, fHitTruthLabel));
   }
 
+
   // Loop over hits
   for (art::Ptr<recob::Hit> hit : hitlist) {
 
@@ -274,6 +277,13 @@ void HDF5Maker::analyze(art::Event const& e)
 
 
     // Get the tpc geometry information from the id
+    if(std::find(tpc_ids_checked.begin(), tpc_ids_checked.end(), wireid.TPC ) != tpc_ids_checked.end())
+    {
+
+    }
+
+    else {
+
     auto const& tpcgeom = art::ServiceHandle<geo::Geometry>()->TPC(geo::TPCID{0,wireid.TPC});
     geo::Point_t center = tpcgeom.GetCenter();
 
@@ -289,12 +299,15 @@ void HDF5Maker::analyze(art::Event const& e)
     fDetectorNtuple->insert(cen.data(),tpcgeom.DetectDriftDirection() 
     );
 
+
     mf::LogInfo("HDF5Maker") << "Filling detector table"
                              << "\nrun " << evtID[0] << ", subrun " << evtID[1]
                              << ", event " << evtID[2]
                              << "\n tpc center" << cen.data()
                              << "\n drift direction " << tpcgeom.DetectDriftDirection();
 
+    tpc_ids_checked.push_back(wireid.TPC);
+    }
 
 
 
@@ -375,6 +388,9 @@ void HDF5Maker::analyze(art::Event const& e)
                              << "\nstart process " << p->Process()
                              << ", end process " << p->EndProcess();
   }
+
+ 
+
 
   
 
