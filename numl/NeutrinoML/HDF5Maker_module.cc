@@ -457,6 +457,7 @@ void HDF5Maker::endSubRun(art::SubRun const& sr) {
   delete fHitNtuple;
   delete fParticleNtuple;
   delete fEnergyDepNtuple;
+  delete fDetectorNtuple;
   fFile.close();
 }
 
