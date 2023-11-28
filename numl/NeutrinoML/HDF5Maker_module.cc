@@ -281,7 +281,9 @@ void HDF5Maker::analyze(art::Event const& e)
     mf::LogInfo("HDF5Maker") << "Filling detector table"
                              << "\nrun " << evtID[0] << ", subrun " << evtID[1]
                              << ", event " << evtID[2]
-                             << "\n tpc center" << cen.data()
+                             << "\n tpc center x" << (float)geo::vect::Xcoord(center)
+	    		     << "\n tpc center y" << (float)geo::vect::Ycoord(center)
+	    		     << "\n tpc center z" << (float)geo::vect::Zcoord(center)
                              << "\n drift direction " << tpcgeom.DetectDriftDirection()
                              << "\n tpc " << wireid.TPC;
 
