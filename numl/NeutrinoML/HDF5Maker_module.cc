@@ -269,11 +269,8 @@ void HDF5Maker::analyze(art::Event const& e)
                              << ", local wire " << wireid.Wire
                              << ", local time " << hit->PeakTime();
 
-    if(std::find(tpc_ids_checked.begin(), tpc_ids_checked.end(), wireid.TPC ) != tpc_ids_checked.end())
-    {
-        // we don't have to add anything if we alredy have checked the tpc id
-    } else {
-    // if we haven't checked a tpc id add the info to the table
+ // if we haven't checked a tpc id add the info to the table
+    if(std::find(tpc_ids_checked.begin(), tpc_ids_checked.end(), wireid.TPC ) == tpc_ids_checked.end()){
     auto const& tpcgeom = art::ServiceHandle<geo::Geometry>()->TPC(geo::TPCID{0,wireid.TPC});
     geo::Point_t center = tpcgeom.GetCenter();
     fDetectorNtuple->insert((float)geo::vect::Xcoord(center),(float)geo::vect::Ycoord(center),(float)geo::vect::Zcoord(center),tpcgeom.DetectDriftDirection(),wireid.TPC
@@ -282,12 +279,12 @@ void HDF5Maker::analyze(art::Event const& e)
                              << "\nrun " << evtID[0] << ", subrun " << evtID[1]
                              << ", event " << evtID[2]
                              << "\n tpc center x" << (float)geo::vect::Xcoord(center)
-	    		     << "\n tpc center y" << (float)geo::vect::Ycoord(center)
-	    		     << "\n tpc center z" << (float)geo::vect::Zcoord(center)
+                             << "\n tpc center y" << (float)geo::vect::Ycoord(center)
+                             << "\n tpc center z" << (float)geo::vect::Zcoord(center)
                              << "\n drift direction " << tpcgeom.DetectDriftDirection()
                              << "\n tpc " << wireid.TPC;
 
-    tpc_ids_checked.push_back(wireid.TPC); // once we check a tpc id add it to the list of ids we checked 
+    tpc_ids_checked.push_back(wireid.TPC); // once we check a tpc id add it to the list of ids we checked
     }
 
     // Fill energy deposit table
