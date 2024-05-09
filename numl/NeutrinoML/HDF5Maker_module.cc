@@ -101,7 +101,10 @@ private:
   hep_hpc::hdf5::Ntuple<hep_hpc::hdf5::Column<int, 1>,    // event id (run, subrun, event)
                         hep_hpc::hdf5::Column<int, 1>,    // hit id
                         hep_hpc::hdf5::Column<int, 1>,    // g4 id
-                        hep_hpc::hdf5::Column<float, 1>   // deposited energy [ MeV ]
+                        hep_hpc::hdf5::Column<float, 1>,  // deposited energy [ MeV ]
+                        hep_hpc::hdf5::Column<float, 1>,  // x position
+                        hep_hpc::hdf5::Column<float, 1>,  // y position
+                        hep_hpc::hdf5::Column<float, 1>   // z position
   >* fEnergyDepNtuple; ///< energy deposition ntuple
 };
 
@@ -258,42 +261,43 @@ void HDF5Maker::analyze(art::Event const& e)
                              << ", local time " << hit->PeakTime();
 
     // Fill energy deposit table
-    if (fUseMap) {
-      std::vector<art::Ptr<simb::MCParticle>> particle_vec = hittruth->at(hit.key());
-      std::vector<anab::BackTrackerHitMatchingData const *> match_vec = hittruth->data(hit.key());
-      //loop over particles
-      for (size_t i_p = 0; i_p < particle_vec.size(); ++i_p) {
-	g4id.insert(particle_vec[i_p]->TrackId());
-	fEnergyDepNtuple->insert(evtID.data(),
-		hit.key(), particle_vec[i_p]->TrackId(), match_vec[i_p]->ideFraction
-	);
-	mf::LogInfo("HDF5Maker") << "Filling energy deposit table"
-	        		 << "\nrun " << evtID[0] << ", subrun " << evtID[1]
-			         << ", event " << evtID[2]
-			         << "\nhit id " << hit.key() << ", g4 id "
-			         << particle_vec[i_p]->TrackId() << ", energy fraction "
-			         << match_vec[i_p]->ideFraction;
-      }
-    } else {
-      for (const sim::TrackIDE& ide : bt->HitToTrackIDEs(clockData, hit)) {
-        if (ide.trackID < 0)
+  //   if (fUseMap) {
+  //     std::vector<art::Ptr<simb::MCParticle>> particle_vec = hittruth->at(hit.key());
+  //     std::vector<anab::BackTrackerHitMatchingData const *> match_vec = hittruth->data(hit.key());
+  //     //loop over particles
+  //     for (size_t i_p = 0; i_p < particle_vec.size(); ++i_p) {
+	// g4id.insert(particle_vec[i_p]->TrackId());
+	// fEnergyDepNtuple->insert(evtID.data(),
+	// 	hit.key(), particle_vec[i_p]->TrackId(), match_vec[i_p]->ideFraction
+	// );
+	// mf::LogInfo("HDF5Maker") << "Filling energy deposit table"
+	//         		 << "\nrun " << evtID[0] << ", subrun " << evtID[1]
+	// 		         << ", event " << evtID[2]
+	// 		         << "\nhit id " << hit.key() << ", g4 id "
+	// 		         << particle_vec[i_p]->TrackId() << ", energy fraction "
+	// 		         << match_vec[i_p]->ideFraction;
+  //     }
+  //   } else {
+      for (const sim::IDE* ide : bt->HitToSimIDEs_Ps(clockData, hit)) {
+        if (ide->trackID < 0)
           throw art::Exception(art::errors::LogicError)
-            << "Negative track ID (" << ide.trackID << ") found in simulated "
+            << "Negative track ID (" << ide->trackID << ") found in simulated "
             << "energy deposits! This is usually an indication that you're "
             << "running over simulation from before the larsoft Geant4 "
             << "refactor, which is not supported due to its incomplete MC "
             << "truth record.";
-	g4id.insert(ide.trackID);
+	g4id.insert(ide->trackID);
 	fEnergyDepNtuple->insert(evtID.data(),
-		hit.key(), ide.trackID, ide.energy);
+		hit.key(), ide->trackID, ide->energy, ide->x, ide->y, ide->z);
 	mf::LogInfo("HDF5Maker") << "Filling energy deposit table"
                                  << "\nrun " << evtID[0] << ", subrun " << evtID[1]
                                  << ", event " << evtID[2]
 			         << "\nhit id " << hit.key() << ", g4 id "
-			         << ide.trackID << ", energy "
-			         << ide.energy << " MeV";
+			         << ide->trackID << ", energy "
+			         << ide->energy << " MeV, position ("
+               << ide->x << ", " << ide->y << ", " << ide->z << ")";
       } // for energy deposit
-    } // if using microboone map method or not
+    // } // if using microboone map method or not
   } // for hit
 
   art::ServiceHandle<cheat::ParticleInventoryService> pi;
@@ -404,7 +408,10 @@ void HDF5Maker::beginSubRun(art::SubRun const& sr) {
       hep_hpc::hdf5::make_column<int>("event_id", 3),
       hep_hpc::hdf5::make_scalar_column<int>("hit_id"),
       hep_hpc::hdf5::make_scalar_column<int>("g4_id"),
-      hep_hpc::hdf5::make_scalar_column<float>("energy")
+      hep_hpc::hdf5::make_scalar_column<float>("energy"),
+      hep_hpc::hdf5::make_scalar_column<float>("x_position"),
+      hep_hpc::hdf5::make_scalar_column<float>("y_position"),
+      hep_hpc::hdf5::make_scalar_column<float>("z_position")
   ));
 }
 
