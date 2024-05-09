@@ -361,7 +361,7 @@ void HDF5Maker::beginSubRun(art::SubRun const& sr) {
       hep_hpc::hdf5::make_ntuple({fFile, "event_table", 1000},
         hep_hpc::hdf5::make_column<int>("event_id", 3),
         hep_hpc::hdf5::make_scalar_column<int>("is_cc"),
-	hep_hpc::hdf5::make_scalar_column<int>("nu_pdg"),    
+        hep_hpc::hdf5::make_scalar_column<int>("nu_pdg"),    
         hep_hpc::hdf5::make_scalar_column<float>("nu_energy"),
         hep_hpc::hdf5::make_scalar_column<float>("lep_energy"),
         hep_hpc::hdf5::make_column<float>("nu_dir", 3)
