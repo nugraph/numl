@@ -1,9 +1,9 @@
-parent numl v09_79_00
+parent numl v09_90_00
 defaultqual e26:prof
 
 product 	version
 cetbuildtools   v8_20_00  -  only_for_build
-dunesw          v09_79_00d02
+dunesw          v09_90_00d00
 end_product_list
 
 qualifier   dunesw      hep_hpc   notes
