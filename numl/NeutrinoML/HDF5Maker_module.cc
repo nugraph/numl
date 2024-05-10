@@ -3,7 +3,7 @@
 // Plugin Type: analyzer (art v3_06_03)
 // File:        HDF5Maker_module.cc
 //
-// Generated at Wed May  5 08:23:31 2021 by Jeremy Hewes using cetskelgen
+// Generated at Wed May  5 08:23:31 2021 by V Hewes using cetskelgen
 // from cetlib version v3_11_01.
 ////////////////////////////////////////////////////////////////////////
 
@@ -62,7 +62,7 @@ private:
 
   hep_hpc::hdf5::Ntuple<hep_hpc::hdf5::Column<int, 1>,    // event id (run, subrun, event)
                         hep_hpc::hdf5::Column<int, 1>,    // is cc
-			hep_hpc::hdf5::Column<int, 1>, // nu pdg
+                        hep_hpc::hdf5::Column<int, 1>, // nu pdg
                         hep_hpc::hdf5::Column<float, 1>,  // nu energy
                         hep_hpc::hdf5::Column<float, 1>,  // lep energy
                         hep_hpc::hdf5::Column<float, 1>   // nu dir (x, y, z)
@@ -101,7 +101,10 @@ private:
   hep_hpc::hdf5::Ntuple<hep_hpc::hdf5::Column<int, 1>,    // event id (run, subrun, event)
                         hep_hpc::hdf5::Column<int, 1>,    // hit id
                         hep_hpc::hdf5::Column<int, 1>,    // g4 id
-                        hep_hpc::hdf5::Column<float, 1>   // deposited energy [ MeV ]
+                        hep_hpc::hdf5::Column<float, 1>,  // deposited energy [ MeV ]
+                        hep_hpc::hdf5::Column<float, 1>,  // x position
+                        hep_hpc::hdf5::Column<float, 1>,  // y position
+                        hep_hpc::hdf5::Column<float, 1>   // z position
   >* fEnergyDepNtuple; ///< energy deposition ntuple
 };
 
@@ -263,35 +266,46 @@ void HDF5Maker::analyze(art::Event const& e)
       std::vector<anab::BackTrackerHitMatchingData const *> match_vec = hittruth->data(hit.key());
       //loop over particles
       for (size_t i_p = 0; i_p < particle_vec.size(); ++i_p) {
-	g4id.insert(particle_vec[i_p]->TrackId());
-	fEnergyDepNtuple->insert(evtID.data(),
-		hit.key(), particle_vec[i_p]->TrackId(), match_vec[i_p]->ideFraction
-	);
-	mf::LogInfo("HDF5Maker") << "Filling energy deposit table"
-	        		 << "\nrun " << evtID[0] << ", subrun " << evtID[1]
-			         << ", event " << evtID[2]
-			         << "\nhit id " << hit.key() << ", g4 id "
-			         << particle_vec[i_p]->TrackId() << ", energy fraction "
-			         << match_vec[i_p]->ideFraction;
-      }
+        g4id.insert(particle_vec[i_p]->TrackId());
+        fEnergyDepNtuple->insert(evtID.data(), hit.key(),
+                                 particle_vec[i_p]->TrackId(),
+                                 match_vec[i_p]->ideFraction,
+                                 std::numeric_limits<double>::quiet_NaN(),
+                                 std::numeric_limits<double>::quiet_NaN(),
+                                 std::numeric_limits<double>::quiet_NaN());
+        mf::LogInfo("HDF5Maker") << "Filling energy deposit table"
+                    << "\nrun " << evtID[0] << ", subrun " << evtID[1]
+                    << ", event " << evtID[2]
+                    << "\nhit id " << hit.key() << ", g4 id "
+                    << particle_vec[i_p]->TrackId() << ", energy fraction "
+                    << match_vec[i_p]->ideFraction << ", position ("
+                    << std::nan << ", " << std::nan << ", " << std::nan << ")";;
+      } // for particle
     } else {
-      for (const sim::TrackIDE& ide : bt->HitToTrackIDEs(clockData, hit)) {
-        if (ide.trackID < 0)
+      // skip events with no TrackIDEs due to bug fetching average sim::IDEs
+      if (!bt->HitToTrackIds(clockData, *hit).size()) continue;
+
+      // loop over averaged sim::IDEs
+      for (const sim::IDE& ide : bt->HitToAvgSimIDEs(clockData, hit)) {
+        if (ide.trackID < 0) {
           throw art::Exception(art::errors::LogicError)
             << "Negative track ID (" << ide.trackID << ") found in simulated "
             << "energy deposits! This is usually an indication that you're "
             << "running over simulation from before the larsoft Geant4 "
             << "refactor, which is not supported due to its incomplete MC "
             << "truth record.";
-	g4id.insert(ide.trackID);
-	fEnergyDepNtuple->insert(evtID.data(),
-		hit.key(), ide.trackID, ide.energy);
-	mf::LogInfo("HDF5Maker") << "Filling energy deposit table"
+        } // if track ID is negative
+
+        g4id.insert(ide.trackID);
+        fEnergyDepNtuple->insert(evtID.data(),
+          hit.key(), ide.trackID, ide.energy, ide.x, ide.y, ide.z);
+        mf::LogInfo("HDF5Maker") << "Filling energy deposit table"
                                  << "\nrun " << evtID[0] << ", subrun " << evtID[1]
                                  << ", event " << evtID[2]
-			         << "\nhit id " << hit.key() << ", g4 id "
-			         << ide.trackID << ", energy "
-			         << ide.energy << " MeV";
+                                 << "\nhit id " << hit.key() << ", g4 id "
+                                 << ide.trackID << ", energy "
+                                 << ide.energy << " MeV, position ("
+                                 << ide.x << ", " << ide.y << ", " << ide.z << ")";
       } // for energy deposit
     } // if using microboone map method or not
   } // for hit
@@ -357,7 +371,7 @@ void HDF5Maker::beginSubRun(art::SubRun const& sr) {
       hep_hpc::hdf5::make_ntuple({fFile, "event_table", 1000},
         hep_hpc::hdf5::make_column<int>("event_id", 3),
         hep_hpc::hdf5::make_scalar_column<int>("is_cc"),
-	hep_hpc::hdf5::make_scalar_column<int>("nu_pdg"),    
+        hep_hpc::hdf5::make_scalar_column<int>("nu_pdg"),    
         hep_hpc::hdf5::make_scalar_column<float>("nu_energy"),
         hep_hpc::hdf5::make_scalar_column<float>("lep_energy"),
         hep_hpc::hdf5::make_column<float>("nu_dir", 3)
@@ -404,7 +418,10 @@ void HDF5Maker::beginSubRun(art::SubRun const& sr) {
       hep_hpc::hdf5::make_column<int>("event_id", 3),
       hep_hpc::hdf5::make_scalar_column<int>("hit_id"),
       hep_hpc::hdf5::make_scalar_column<int>("g4_id"),
-      hep_hpc::hdf5::make_scalar_column<float>("energy")
+      hep_hpc::hdf5::make_scalar_column<float>("energy"),
+      hep_hpc::hdf5::make_scalar_column<float>("x_position"),
+      hep_hpc::hdf5::make_scalar_column<float>("y_position"),
+      hep_hpc::hdf5::make_scalar_column<float>("z_position")
   ));
 }
 
