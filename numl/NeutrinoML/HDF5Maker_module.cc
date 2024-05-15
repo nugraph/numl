@@ -18,6 +18,10 @@
 #include "canvas/Persistency/Common/FindManyP.h"
 #include "messagefacility/MessageLogger/MessageLogger.h"
 
+#include "larcore/Geometry/Geometry.h"
+#include "larcorealg/Geometry/GeometryCore.h"
+#include "larcorealg/Geometry/TPCGeo.h"
+
 #include "nusimdata/SimulationBase/MCTruth.h"
 #include "lardataobj/RecoBase/Hit.h"
 #include "lardataobj/RecoBase/SpacePoint.h"
@@ -106,6 +110,13 @@ private:
                         hep_hpc::hdf5::Column<float, 1>,  // y position
                         hep_hpc::hdf5::Column<float, 1>   // z position
   >* fEnergyDepNtuple; ///< energy deposition ntuple
+
+  hep_hpc::hdf5::Ntuple<hep_hpc::hdf5::Column<float, 1>,  // TPC module center x
+                        hep_hpc::hdf5::Column<float, 1>,  // TPC module center y
+                        hep_hpc::hdf5::Column<float, 1>,  // TPC module center z
+                        hep_hpc::hdf5::Column<int, 1>,     // drift direction 
+                        hep_hpc::hdf5::Column<int, 1>      // tpc id 
+  >* fDetectorNtuple;
 };
 
 
@@ -123,6 +134,7 @@ HDF5Maker::HDF5Maker(fhicl::ParameterSet const& p)
     throw art::Exception(art::errors::Configuration)
       << "EventInfo must be \"none\" or \"nu\", not " << fEventInfo;
 }
+std::vector<double> tpc_ids_checked = {}; // add the TPC ids here so we only check them once  
 
 void HDF5Maker::analyze(art::Event const& e)
 {
@@ -259,6 +271,24 @@ void HDF5Maker::analyze(art::Event const& e)
                              << "\nlocal plane " << wireid.Plane
                              << ", local wire " << wireid.Wire
                              << ", local time " << hit->PeakTime();
+
+ // if we haven't checked a tpc id add the info to the table
+    if(std::find(tpc_ids_checked.begin(), tpc_ids_checked.end(), wireid.TPC ) == tpc_ids_checked.end()){
+      auto const& tpcgeom = art::ServiceHandle<geo::Geometry>()->TPC(geo::TPCID{0,wireid.TPC});
+      geo::Point_t center = tpcgeom.GetCenter();
+      fDetectorNtuple->insert((float)geo::vect::Xcoord(center),(float)geo::vect::Ycoord(center),(float)geo::vect::Zcoord(center),tpcgeom.DetectDriftDirection(),wireid.TPC
+      );
+      mf::LogInfo("HDF5Maker") << "Filling detector table"
+                               << "\nrun " << evtID[0] << ", subrun " << evtID[1]
+                               << ", event " << evtID[2]
+                               << "\n tpc center x" << (float)geo::vect::Xcoord(center)
+                               << "\n tpc center y" << (float)geo::vect::Ycoord(center)
+                               << "\n tpc center z" << (float)geo::vect::Zcoord(center)
+                               << "\n drift direction " << tpcgeom.DetectDriftDirection()
+                               << "\n tpc " << wireid.TPC;
+      
+      tpc_ids_checked.push_back(wireid.TPC); // once we check a tpc id add it to the list of ids we checked
+    }
 
     // Fill energy deposit table
     if (fUseMap) {
@@ -423,6 +453,15 @@ void HDF5Maker::beginSubRun(art::SubRun const& sr) {
       hep_hpc::hdf5::make_scalar_column<float>("y_position"),
       hep_hpc::hdf5::make_scalar_column<float>("z_position")
   ));
+
+   fDetectorNtuple = new hep_hpc::hdf5::Ntuple(
+      hep_hpc::hdf5::make_ntuple({fFile, "detector_table", 1000},
+        hep_hpc::hdf5::make_scalar_column<float>("tpc_center_x"),
+        hep_hpc::hdf5::make_scalar_column<float>("tpc_center_y"),
+        hep_hpc::hdf5::make_scalar_column<float>("tpc_center_z"),
+        hep_hpc::hdf5::make_scalar_column<int>("drift_direction"),
+        hep_hpc::hdf5::make_scalar_column<int>("tpc")
+  ));
 }
 
 void HDF5Maker::endSubRun(art::SubRun const& sr) {
@@ -432,6 +471,7 @@ void HDF5Maker::endSubRun(art::SubRun const& sr) {
   delete fHitNtuple;
   delete fParticleNtuple;
   delete fEnergyDepNtuple;
+  delete fDetectorNtuple;
   fFile.close();
 }
 
