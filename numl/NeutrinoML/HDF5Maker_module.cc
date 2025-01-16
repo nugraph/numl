@@ -129,7 +129,6 @@ HDF5Maker::HDF5Maker(fhicl::ParameterSet const& p)
     throw art::Exception(art::errors::Configuration)
       << "EventInfo must be \"none\" or \"nu\", not " << fEventInfo;
 }
-std::vector<double> tpc_ids_checked = {}; // add the TPC ids here so we only check them once  
 
 void HDF5Maker::analyze(art::Event const& e)
 {
