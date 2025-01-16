@@ -19,8 +19,10 @@
 #include "messagefacility/MessageLogger/MessageLogger.h"
 
 #include "larcore/Geometry/Geometry.h"
+#include "larcore/Geometry/WireReadout.h"
 #include "larcorealg/Geometry/GeometryCore.h"
 #include "larcorealg/Geometry/TPCGeo.h"
+#include "larcorealg/Geometry/WireReadoutGeom.h"
 
 #include "nusimdata/SimulationBase/MCTruth.h"
 #include "lardataobj/RecoBase/Hit.h"
@@ -83,12 +85,12 @@ private:
                         hep_hpc::hdf5::Column<float, 1>,  // hit integral
                         hep_hpc::hdf5::Column<float, 1>,  // hit rms
                         hep_hpc::hdf5::Column<int, 1>,    // tpc id
-                        hep_hpc::hdf5::Column<int, 1>,    // global plane
-                        hep_hpc::hdf5::Column<float, 1>,  // global wire
-                        hep_hpc::hdf5::Column<float, 1>,  // global time
-                        hep_hpc::hdf5::Column<int, 1>,    // raw plane
-                        hep_hpc::hdf5::Column<float, 1>,  // raw wire
-                        hep_hpc::hdf5::Column<float, 1>   // raw time
+                        hep_hpc::hdf5::Column<int, 1>,    // plane index
+                        hep_hpc::hdf5::Column<float, 1>,  // wire index
+                        hep_hpc::hdf5::Column<float, 1>,  // hit TDC
+                        hep_hpc::hdf5::Column<int, 1>,    // view index
+                        hep_hpc::hdf5::Column<float, 1>,  // projection coordinate
+                        hep_hpc::hdf5::Column<float, 1>   // drift coordinate
   >* fHitNtuple; ///< hit ntuple
 
   hep_hpc::hdf5::Ntuple<hep_hpc::hdf5::Column<int, 1>,    // event id (run, subrun, event)
@@ -110,13 +112,6 @@ private:
                         hep_hpc::hdf5::Column<float, 1>,  // y position
                         hep_hpc::hdf5::Column<float, 1>   // z position
   >* fEnergyDepNtuple; ///< energy deposition ntuple
-
-  hep_hpc::hdf5::Ntuple<hep_hpc::hdf5::Column<float, 1>,  // TPC module center x
-                        hep_hpc::hdf5::Column<float, 1>,  // TPC module center y
-                        hep_hpc::hdf5::Column<float, 1>,  // TPC module center z
-                        hep_hpc::hdf5::Column<int, 1>,     // drift direction 
-                        hep_hpc::hdf5::Column<int, 1>      // tpc id 
-  >* fDetectorNtuple;
 };
 
 
@@ -251,13 +246,36 @@ void HDF5Maker::analyze(art::Event const& e)
 
     // Fill hit table
     geo::WireID wireid = hit->WireID();
-    size_t plane = wireid.Plane;
-    size_t wire = wireid.Wire;
+
+    const geo::TPCGeo& tpc_geo = art::ServiceHandle<geo::Geometry>()->TPC(geo::TPCID{0,wireid.TPC});
+    const geo::WireGeo& wire_geo = art::ServiceHandle<geo::WireReadout>()->Get().Wire(wireid);
+
+    int plane = wireid.Plane;
+    int wire = wireid.Wire;
     double time = hit->PeakTime();
+
+    // global view
+    int view;
+    if (plane == 2) {
+      // view for collection plane is unchanged
+      view = 2;
+    } else {
+      // separate induction hits out into views based on wire direction 
+      view = static_cast<int>(wire_geo.CosThetaZ() < 0);
+    } // if collection plane
+
+    // global wire projection coordinate
+    geo::Point_t wire_center = wire_geo.GetCenter();
+    double proj = wire_center.Z() * wire_geo.SinThetaZ() - wire_center.Y() * wire_geo.CosThetaZ();
+
+    // global drift time coordinate
+    double drift_sign = geo::to_int(tpc_geo.DriftSign());
+    double drift_distance = clockData.TPCTick2Time(hit->PeakTime()) * detProp.DriftVelocity();
+    double drift = wire_center.X() - (drift_sign * drift_distance);
+
     fHitNtuple->insert(evtID.data(),
       hit.key(), hit->Integral(), hit->RMS(), wireid.TPC,
-      plane, wire, time,
-      wireid.Plane, wireid.Wire, hit->PeakTime()
+      plane, wire, time, view, proj, drift
     );
 
     mf::LogInfo("HDF5Maker") << "Filling hit table"
@@ -266,29 +284,9 @@ void HDF5Maker::analyze(art::Event const& e)
                              << "\nhit id " << hit.key() << ", integral "
                              << hit->Integral() << ", RMS " << hit->RMS()
                              << ", TPC " << wireid.TPC
-                             << "\nglobal plane " << plane << ", global wire "
-                             << wire << ", global time " << time
-                             << "\nlocal plane " << wireid.Plane
-                             << ", local wire " << wireid.Wire
-                             << ", local time " << hit->PeakTime();
-
- // if we haven't checked a tpc id add the info to the table
-    if(std::find(tpc_ids_checked.begin(), tpc_ids_checked.end(), wireid.TPC ) == tpc_ids_checked.end()){
-      auto const& tpcgeom = art::ServiceHandle<geo::Geometry>()->TPC(geo::TPCID{0,wireid.TPC});
-      geo::Point_t center = tpcgeom.GetCenter();
-      fDetectorNtuple->insert((float)geo::vect::Xcoord(center),(float)geo::vect::Ycoord(center),(float)geo::vect::Zcoord(center),tpcgeom.DetectDriftDirection(),wireid.TPC
-      );
-      mf::LogInfo("HDF5Maker") << "Filling detector table"
-                               << "\nrun " << evtID[0] << ", subrun " << evtID[1]
-                               << ", event " << evtID[2]
-                               << "\n tpc center x" << (float)geo::vect::Xcoord(center)
-                               << "\n tpc center y" << (float)geo::vect::Ycoord(center)
-                               << "\n tpc center z" << (float)geo::vect::Zcoord(center)
-                               << "\n drift direction " << tpcgeom.DetectDriftDirection()
-                               << "\n tpc " << wireid.TPC;
-      
-      tpc_ids_checked.push_back(wireid.TPC); // once we check a tpc id add it to the list of ids we checked
-    }
+                             << "\nplane " << plane << ", wire " << wire
+                             << ", time " << time << "\nview " << view
+                             << ", proj " << proj << ", drift " << drift;
 
     // Fill energy deposit table
     if (fUseMap) {
@@ -422,12 +420,12 @@ void HDF5Maker::beginSubRun(art::SubRun const& sr) {
       hep_hpc::hdf5::make_scalar_column<float>("integral"),
       hep_hpc::hdf5::make_scalar_column<float>("rms"),
       hep_hpc::hdf5::make_scalar_column<int>("tpc"),
-      hep_hpc::hdf5::make_scalar_column<int>("global_plane"),
-      hep_hpc::hdf5::make_scalar_column<float>("global_wire"),
-      hep_hpc::hdf5::make_scalar_column<float>("global_time"),
-      hep_hpc::hdf5::make_scalar_column<int>("local_plane"),
-      hep_hpc::hdf5::make_scalar_column<float>("local_wire"),
-      hep_hpc::hdf5::make_scalar_column<float>("local_time")
+      hep_hpc::hdf5::make_scalar_column<int>("plane"),
+      hep_hpc::hdf5::make_scalar_column<float>("wire"),
+      hep_hpc::hdf5::make_scalar_column<float>("time"),
+      hep_hpc::hdf5::make_scalar_column<int>("view"),
+      hep_hpc::hdf5::make_scalar_column<float>("proj"),
+      hep_hpc::hdf5::make_scalar_column<float>("drift")
   ));
 
   fParticleNtuple = new hep_hpc::hdf5::Ntuple(
@@ -453,15 +451,6 @@ void HDF5Maker::beginSubRun(art::SubRun const& sr) {
       hep_hpc::hdf5::make_scalar_column<float>("y_position"),
       hep_hpc::hdf5::make_scalar_column<float>("z_position")
   ));
-
-   fDetectorNtuple = new hep_hpc::hdf5::Ntuple(
-      hep_hpc::hdf5::make_ntuple({fFile, "detector_table", 1000},
-        hep_hpc::hdf5::make_scalar_column<float>("tpc_center_x"),
-        hep_hpc::hdf5::make_scalar_column<float>("tpc_center_y"),
-        hep_hpc::hdf5::make_scalar_column<float>("tpc_center_z"),
-        hep_hpc::hdf5::make_scalar_column<int>("drift_direction"),
-        hep_hpc::hdf5::make_scalar_column<int>("tpc")
-  ));
 }
 
 void HDF5Maker::endSubRun(art::SubRun const& sr) {
@@ -471,7 +460,6 @@ void HDF5Maker::endSubRun(art::SubRun const& sr) {
   delete fHitNtuple;
   delete fParticleNtuple;
   delete fEnergyDepNtuple;
-  delete fDetectorNtuple;
   fFile.close();
 }
 
