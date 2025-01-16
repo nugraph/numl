@@ -18,6 +18,7 @@ simple_plugin(HDF5Maker "module"
     nusimdata_SimulationBase
     larsim_MCCheater_BackTrackerService_service           
     larsim_MCCheater_ParticleInventoryService_service
+    lardata_DetectorInfoServices_DetectorPropertiesServiceStandard_service
     hep_hpc_hdf5
     hep_hpc_Utilities
     ${HDF5_LIBRARIES}

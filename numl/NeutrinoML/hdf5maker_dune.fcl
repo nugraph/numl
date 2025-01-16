@@ -34,4 +34,3 @@ physics:
 }
 
 physics.analyzers.hdf5maker.SPLabel: "spsolve"
-services.BackTrackerService.BackTracker.SimChannelModuleLabel: "elecDrift"
